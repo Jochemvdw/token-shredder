@@ -3,7 +3,7 @@
 ## From Source
 
 ```bash
-git clone https://github.com/OWNER/token-shredder.git && cd token-shredder && pip install .
+git clone https://github.com/Jochemvdw/token-shredder.git && cd token-shredder && pip install .
 ```
 
 PyPI release coming soon.

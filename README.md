@@ -11,7 +11,7 @@ Runs locally. No API key, no model downloads.
 ## Install
 
 ```bash
-git clone https://github.com/OWNER/token-shredder.git
+git clone https://github.com/Jochemvdw/token-shredder.git
 cd token-shredder
 pip install .
 ```

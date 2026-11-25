@@ -63,9 +63,9 @@ api = [
 token-shredder = "token_shredder.main:app"
 
 [project.urls]
-Homepage = "https://github.com/OWNER/token-shredder"
-Repository = "https://github.com/OWNER/token-shredder"
-Issues = "https://github.com/OWNER/token-shredder/issues"
+Homepage = "https://github.com/Jochemvdw/token-shredder"
+Repository = "https://github.com/Jochemvdw/token-shredder"
+Issues = "https://github.com/Jochemvdw/token-shredder/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
