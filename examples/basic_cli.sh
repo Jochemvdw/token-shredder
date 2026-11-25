@@ -4,8 +4,7 @@
 
 ```bash
 # Install
-git clone https://github.com/Jochemvdw/token-shredder.git && cd token-shredder && pip install .
-# PyPI release coming soon
+pip install token-shredder
 
 # Convert a PDF
 token-shredder convert document.pdf

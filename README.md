@@ -6,14 +6,12 @@ Token Shredder turns PDF, DOCX, PPTX, HTML, code, JSON and ~25 other formats int
 
 Runs locally. No API key, no model downloads.
 
-> **Status:** alpha (v0.3.0). Not yet on PyPI — install from source for now.
+> **Status:** alpha (v0.3.0). Feedback and issues welcome.
 
 ## Install
 
 ```bash
-git clone https://github.com/Jochemvdw/token-shredder.git
-cd token-shredder
-pip install .
+pip install token-shredder        # or: pipx install token-shredder
 ```
 
 Python 3.10+.

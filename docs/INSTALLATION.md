@@ -1,14 +1,18 @@
 # Installation
 
+## From PyPI
+
+```bash
+pip install token-shredder
+```
+
+Or, to get the `token-shredder` command without touching other Python environments: `pipx install token-shredder`.
+
 ## From Source
 
 ```bash
-git clone https://github.com/Jochemvdw/token-shredder.git && cd token-shredder && pip install .
+git clone https://github.com/Jochemvdw/token-shredder.git && cd token-shredder && pip install -e .
 ```
-
-PyPI release coming soon.
-
-For an editable install, use `pip install -e .` instead.
 
 ## Development
 
