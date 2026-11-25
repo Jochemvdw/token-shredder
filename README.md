@@ -59,7 +59,7 @@ What this means:
 - **Code:** an outline — classes, methods and functions with signatures and the first docstring paragraph. Good for "what is in this file and how do I call it?", not for editing or debugging (use `-d 5`). Python uses the real parser; other languages use pattern matching.
 - **JSON:** a schema with one example value per key; a list of objects is described once. If that would not be smaller than the data, you get the data minified (lossless), as with the repo response above. `-d 4` always gives all the data.
 
-The token report the CLI prints uses the same baseline. Reproduce the table with [`benchmarks/`](benchmarks/).
+The token report the CLI prints uses the same baseline, except for HTML, where it compares with the raw page. Reproduce the table with [`benchmarks/`](benchmarks/).
 
 ## Detail levels
 
