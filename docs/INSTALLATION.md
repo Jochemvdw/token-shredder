@@ -1,6 +1,6 @@
 # Installation
 
-Python 3.10 or newer (3.10-3.13 are tested in CI on Linux, macOS and Windows). Known limitations: [README](../README.md#known-gaps-and-limitations).
+Python 3.10 or newer (3.10-3.13 are tested in CI on Linux, macOS and Windows). Known limitations: [LIMITATIONS.md](LIMITATIONS.md).
 
 ## From PyPI
 

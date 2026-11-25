@@ -1,6 +1,6 @@
 # Benchmarks
 
-Reproduces the table in the main [README](../README.md#what-you-get-measured). Limitations of the tool itself: [Known gaps and limitations](../README.md#known-gaps-and-limitations).
+Reproduces the token table in [docs/BENCHMARKS.md](../docs/BENCHMARKS.md). Limitations of the tool itself: [docs/LIMITATIONS.md](../docs/LIMITATIONS.md).
 
 ```bash
 pip install -e . "markitdown[pdf,docx,pptx]"

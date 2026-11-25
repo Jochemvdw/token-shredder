@@ -1,6 +1,6 @@
 # Examples
 
-Real output from the default level. Limitations: see [Known gaps and limitations](../README.md#known-gaps-and-limitations). Measured sizes on real files are in the [README](../README.md#what-you-get-measured).
+Real output from the default level. Limitations: see [Known gaps and limitations](LIMITATIONS.md). Measured sizes on real files: [BENCHMARKS.md](BENCHMARKS.md).
 
 ## Python file
 

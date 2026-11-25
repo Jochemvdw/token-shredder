@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "token-shredder"
-version = "0.4.0"
-description = "Fit files, folders and web pages into an LLM token budget: outlines, data profiles and question-aware extracts as compact markdown."
+version = "0.4.1"
+description = "Local CLI that shrinks PDFs, Office files, web pages, code and data into compact markdown within a token budget for LLM prompts. No AI, no API key."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{name = "Jochem"}]
-keywords = ["token", "compression", "markdown", "llm", "claude", "pdf", "docx"]
+keywords = ["llm", "context-window", "tokens", "markdown", "prompt", "document-conversion", "code-outline", "csv", "claude", "chatgpt"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -23,6 +23,10 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Text Processing :: Markup :: Markdown",
+    "Topic :: Text Processing :: General",
+    "Topic :: Software Development",
+    "Topic :: Utilities",
+    "Natural Language :: English",
 ]
 dependencies = [
     "pypdf>=3.0.0",
@@ -68,6 +72,8 @@ token-shredder = "token_shredder.main:app"
 Homepage = "https://github.com/Jochemvdw/token-shredder"
 Repository = "https://github.com/Jochemvdw/token-shredder"
 Issues = "https://github.com/Jochemvdw/token-shredder/issues"
+Documentation = "https://github.com/Jochemvdw/token-shredder/tree/main/docs"
+Changelog = "https://github.com/Jochemvdw/token-shredder/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]

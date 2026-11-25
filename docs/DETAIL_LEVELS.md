@@ -1,6 +1,6 @@
 # Detail levels
 
-Limitations: see [Known gaps and limitations](../README.md#known-gaps-and-limitations).
+Limitations: see [Known gaps and limitations](LIMITATIONS.md).
 
 `--detail-level` / `-d` takes 1–5 and means the same for every format: **higher = more content**. 3 is the default. Level 5 is always the full content with no compression. A higher level never produces a smaller output than a lower one (tested in `tests/test_detail_levels.py`).
 

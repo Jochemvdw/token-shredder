@@ -1,6 +1,6 @@
 # Supported formats
 
-Limitations (no OCR, pattern-based outlines for non-Python code, no `.doc`/`.xls`/`.ppt`, ...): see [Known gaps and limitations](../README.md#known-gaps-and-limitations).
+Limitations (no OCR, pattern-based outlines for non-Python code, no `.doc`/`.xls`/`.ppt`, ...): see [Known gaps and limitations](LIMITATIONS.md).
 
 **Supported:** `.pdf .docx .pptx .xlsx .html .htm .md .txt .csv .tsv .json .json5 .jsonl .ndjson .yaml .yml .toml .ini .cfg .conf .xml .svg .css .sql .graphql .gql .proto .env .log`, shell scripts (`.sh .bash .zsh .fish .ps1 .bat .cmd`), `Dockerfile`, `Makefile`/`.mk`, `.gitignore`/`.dockerignore`/`.gitattributes`, and code: `.py .js .mjs .cjs .ts .jsx .tsx .java .go .rs .c .cpp .cc .cxx .h .hpp .hh .hxx`.
 
@@ -87,4 +87,4 @@ See [DETAIL_LEVELS.md](DETAIL_LEVELS.md).
 
 ## Output Format
 
-Markdown. There is no `--format` option; `--json` wraps the markdown in a JSON object. Measured numbers: [README](../README.md#what-you-get-measured), [BENCHMARKS.md](BENCHMARKS.md).
+Markdown. There is no `--format` option; `--json` wraps the markdown in a JSON object. Measured numbers: [BENCHMARKS.md](BENCHMARKS.md).

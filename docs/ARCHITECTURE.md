@@ -1,6 +1,6 @@
 # Architecture
 
-Limitations: see [Known gaps and limitations](../README.md#known-gaps-and-limitations).
+Limitations: see [Known gaps and limitations](LIMITATIONS.md).
 
 ```
 file / URL / stdin

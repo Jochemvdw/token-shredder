@@ -1,6 +1,6 @@
 # Contributing
 
-Issues and pull requests are welcome. Token Shredder is alpha software: see [Known gaps and limitations](README.md#known-gaps-and-limitations) for what is out of scope today.
+Issues and pull requests are welcome. Token Shredder is alpha software: see [Known gaps and limitations](docs/LIMITATIONS.md) for what is out of scope today.
 
 ## Setup
 

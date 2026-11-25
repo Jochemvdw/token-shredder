@@ -1,6 +1,6 @@
 # Token counter
 
-`TokenCounter` estimates token counts with tiktoken. tiktoken is an OpenAI tokenizer, so counts for Claude are estimates: keep a 10-20% margin near a hard limit. See [Known gaps and limitations](../README.md#known-gaps-and-limitations).
+`TokenCounter` estimates token counts with tiktoken. tiktoken is an OpenAI tokenizer, so counts for Claude are estimates: keep a 10-20% margin near a hard limit. See [Known gaps and limitations](LIMITATIONS.md).
 
 ## Methods
 

@@ -1,6 +1,6 @@
 # Usage
 
-Limitations (outlines drop function bodies, no OCR, `--query` is keyword ranking, ...): see [Known gaps and limitations](../README.md#known-gaps-and-limitations).
+Limitations (outlines drop function bodies, no OCR, `--query` is keyword ranking, ...): see [Known gaps and limitations](LIMITATIONS.md).
 
 ## Commands
 

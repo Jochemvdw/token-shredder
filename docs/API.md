@@ -1,6 +1,6 @@
 # API reference
 
-Limitations: see [Known gaps and limitations](../README.md#known-gaps-and-limitations). The HTTP API has no authentication; run it on localhost or behind your own auth.
+Limitations: see [Known gaps and limitations](LIMITATIONS.md). The HTTP API has no authentication; run it on localhost or behind your own auth.
 
 ## HTTP API
 

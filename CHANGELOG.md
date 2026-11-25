@@ -1,6 +1,11 @@
 # Changelog
 
-## 0.4.0 (unreleased)
+## 0.4.1 (2026-11-25)
+- Windows: Windows line endings (`\r\n`) no longer end up in CSV/TOML output.
+- README rewritten for first-time readers: real input → output examples, how it works, a short limitations list; the full limitations and benchmark details moved to `docs/LIMITATIONS.md` and `docs/BENCHMARKS.md`.
+- Clearer PyPI summary, keywords and project links.
+
+## 0.4.0 (2026-11-25)
 First release on PyPI.
 - `--max-tokens` / `-t`: fit a file, or a whole folder, into a token budget.
 - `--query` / `-Q`: the parts of a file or folder that best match a question (functions, sections, rows, records) are added in full next to the outline (keyword ranking, offline).
