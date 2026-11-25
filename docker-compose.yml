@@ -1,0 +1,8 @@
+version: '3.8'
+
+services:
+  token-shredder:
+    build: .
+    volumes:
+      - ./data:/data
+    command: convert /data/file.pdf

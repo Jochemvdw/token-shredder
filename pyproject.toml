@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=77.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "token-shredder"
+version = "0.3.0"
+description = "Convert files to compact markdown for LLM prompts: strips markup, outlines code and JSON."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Token Shredder Contributors"}]
+keywords = ["token", "compression", "markdown", "llm", "claude", "pdf", "docx"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Text Processing :: Markup :: Markdown",
+]
+dependencies = [
+    "pypdf>=3.0.0",
+    "python-docx>=0.8.11",
+    "python-pptx>=0.6.21",
+    "openpyxl>=3.1.0",
+    "beautifulsoup4>=4.12.0",
+    "tiktoken>=0.5.0",
+    "fastapi>=0.110.0",
+    "python-multipart>=0.0.9",
+    "pydantic>=2.0",
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+    "pyyaml>=6.0",
+    "aiofiles>=23.0.0",
+    "json5>=0.9.0",
+    "pytoml>=0.1.21",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.5.0",
+    "isort>=5.12.0",
+    "build>=1.0.0",
+    "twine>=5.0.0",
+]
+api = [
+    "anthropic>=0.40.0",
+    "uvicorn>=0.24.0",
+]
+
+[project.scripts]
+token-shredder = "token_shredder.main:app"
+
+[project.urls]
+Homepage = "https://github.com/OWNER/token-shredder"
+Repository = "https://github.com/OWNER/token-shredder"
+Issues = "https://github.com/OWNER/token-shredder/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311', 'py312']
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.isort]
+profile = "black"
+line_length = 100
