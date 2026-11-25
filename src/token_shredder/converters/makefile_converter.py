@@ -34,7 +34,7 @@ class MakefileConverter(BaseConverter):
             with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                 content = f.read()
 
-            markdown_parts.append(f"# Makefile: {file_path}")
+            markdown_parts.append(f"# Makefile: {Path(file_path).name}")
             markdown_parts.append("")
 
             # Extract targets and their dependencies

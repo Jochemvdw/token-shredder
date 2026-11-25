@@ -107,6 +107,8 @@ class FieldStats:
     distinct: Counter = field(default_factory=Counter)
     overflow: bool = False
     single_example: bool = False
+    num_sum: float = 0.0
+    num_count: int = 0
 
     def add(self, value) -> None:
         self.n += 1
@@ -124,6 +126,8 @@ class FieldStats:
                     self.num_max = value
                 if not isinstance(value, int):
                     self.all_int = False
+                self.num_sum += value
+                self.num_count += 1
                 key = value
         elif t == "string":
             ln = len(value)
@@ -243,7 +247,7 @@ def _enum_text(key, count, total) -> str:
     text = str(key) if not isinstance(key, str) else key
     if len(text) > EXAMPLE_LEN:
         text = text[:EXAMPLE_LEN - 1] + "…"
-    return f"{text} ({_pct(count, total)})"
+    return f"{text} ×{count:,} ({_pct(count, total)})"
 
 
 def _example_text(st: FieldStats) -> str:
@@ -274,12 +278,16 @@ def render_field(name: str, st: FieldStats, rows: int, level: int) -> str:
         if t == "number" and not enum and st.num_min is not None:
             rng = _num(st.num_min) if st.num_min == st.num_max else f"{_num(st.num_min)}–{_num(st.num_max)}"
             text += f" {rng} (int: {'yes' if st.all_int else 'no'})"
+            if level >= 3 and st.num_count > 1 and st.num_min != st.num_max:
+                text += f", mean {_num(round(st.num_sum / st.num_count, 2))}"
         elif t == "string" and level >= 3 and not enum:
             if st.dates and st.dates == st.types["string"]:
                 text += f" (date) {st.str_min}–{st.str_max}"
             else:
                 text += f" {st.len_min}–{st.len_max} chars" if st.len_min != st.len_max else f" {st.len_min} chars"
                 text += _example_text(st)
+        if t == "null" and level >= 3:
+            text += f" ×{st.types['null']:,}"
         parts.append(text)
     line = f"- `{name}`: " + " | ".join(parts)
     if enum:
@@ -361,8 +369,15 @@ def describe_map(d: dict, kind: str, level: int) -> list:
     lines = [f"{label}: " + ", ".join(_key_text(k) for k in picked)]
     if kind == "records":
         objs = [v for v in d.values() if isinstance(v, dict)]
+        # An entry with an empty key is usually the "root" (npm lockfiles: the project
+        # itself, with its dependencies): show it in full.
+        if level >= 3 and isinstance(d.get(""), dict):
+            root = json.dumps(d[""], ensure_ascii=False, separators=(",", ":"))
+            lines.append(f'root entry "": {root[:3000]}')
         lines.append("each value (object):")
         lines.extend("  " + fl for fl in render_fields(profile_records(objs), level))
+        if level >= 3:
+            lines.extend(record_index(list(d.items()), key_label=True))
     else:
         st = FieldStats()
         for v in d.values():
@@ -497,3 +512,70 @@ def minify_json_text(text: str) -> str:
         elif ch not in " \t\r\n":
             out.append(ch)
     return "".join(out)
+
+
+_TITLE_KEYS = ("version", "title", "name", "summary", "subject", "headline", "label", "message")
+_ID_KEYS = ("number", "id", "key", "slug")
+INDEX_MAX = 300  # level 3; more records -> '… N more (-d 4 for all data)'
+
+
+def _title_field(records: list):
+    """The field that best names each record (title/name/version...), or None."""
+    keys = {}
+    for r in records[:200]:
+        for k, v in r.items():
+            if isinstance(v, str) and 0 < len(v) <= 200:
+                keys[k] = keys.get(k, 0) + 1
+    present = [k for k, n in keys.items() if n >= 0.8 * min(len(records), 200)]
+    for want in _TITLE_KEYS:
+        if want in present:
+            return want
+    return None
+
+
+def _depth(key) -> int:
+    """Nesting of a map key: node_modules/a = 1, node_modules/a/node_modules/b = 2,
+    @scope/x = 1 (scoped package names have one slash of their own)."""
+    k = str(key)
+    if "node_modules/" in k:
+        return k.count("node_modules/") + (0 if k.startswith("node_modules/") else 1)
+    return k.count("/")
+
+
+def record_index(items: list, key_label: bool = False) -> list:
+    """One short line per record: '<id or key>: <title>' (lists and maps of records).
+
+    This keeps what people ask about ("which version of react?", "what's issue
+    #7651 about?") at a few tokens per record.
+    """
+    records = [v for _, v in items if isinstance(v, dict)]
+    field = _title_field(records)
+    if field is None:
+        return []
+    id_field = None
+    if not key_label:
+        for k in _ID_KEYS:
+            if all(isinstance(r.get(k), (int, str)) for r in records[:50]):
+                id_field = k
+                break
+    limit = INDEX_MAX * 3 if field == "version" else INDEX_MAX  # "name 1.2.3" lines are short
+    if key_label:
+        # Top-level entries first (npm: node_modules/x before a/node_modules/x), so a
+        # capped index keeps the ones people ask about.
+        items = sorted(items, key=lambda kv: (_depth(kv[0]), str(kv[0])))
+    if key_label and field == "version":
+        # Version indexes (lockfiles): every top-level entry, nested ones up to the cap.
+        top = [kv for kv in items if _depth(kv[0]) <= 1]
+        limit = max(limit, len(top))
+    out = [f"index ({field} per {'key' if key_label else 'item'}):"]
+    for i, (k, r) in enumerate(items[:limit]):
+        if not isinstance(r, dict) or not isinstance(r.get(field), str):
+            continue
+        # Drop only a leading "node_modules/": nested paths stay distinguishable.
+        label = (k[len("node_modules/"):] if isinstance(k, str) and k.startswith("node_modules/")
+                 else k) if key_label else (r.get(id_field) if id_field else i)
+        title = r[field] if len(r[field]) <= 90 else r[field][:87] + "..."
+        out.append(f"  {label}: {title}")
+    if len(items) > limit:
+        out.append(f"  ... {len(items) - limit:,} more (use --detail-level 4 for all data)")
+    return out

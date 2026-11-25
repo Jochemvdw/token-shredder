@@ -33,20 +33,19 @@ class ENVConverter(BaseConverter):
             with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                 lines = f.readlines()
 
-            markdown_parts.append(f"# Environment Config: {file_path}")
+            markdown_parts.append(f"# Environment Config: {Path(file_path).name}")
             markdown_parts.append("")
-            markdown_parts.append(f"## Variables ({len([l for l in lines if l.strip() and not l.startswith('#')])})")
-            markdown_parts.append("")
+            markdown_parts.append(f"Variables ({len([l for l in lines if l.strip() and not l.startswith('#')])}):")
 
             for line in lines:
                 line = line.strip()
                 if not line or line.startswith('#'):
                     continue
-                key, _, value = line.partition('=')
-                masked_value = value[:20] + '...' if len(value) > 20 else value
-                markdown_parts.append(f"### {key}")
-                markdown_parts.append(f"Value: `{masked_value.strip()}`")
-                markdown_parts.append("")
+                key, sep, value = line.partition('=')
+                key = key.replace("export ", "").strip()
+                # Values in .env files are usually secrets: never print them.
+                state = "(empty)" if sep and not value.strip().strip("\"'") else "(set, value hidden)"
+                markdown_parts.append(f"- `{key}` {state}")
 
         except Exception as e:
             logger.debug(f"Error reading ENV: {e}")

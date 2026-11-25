@@ -48,7 +48,7 @@ def test_nested_fields_and_dates():
 def test_enum_detection():
     rows = [{"status": "open" if i % 5 < 3 else "closed", "id": f"id{i}"} for i in range(100)]
     out = render_profile(profile_records(rows), 3)
-    assert "enum: open (60%), closed (40%)" in out
+    assert "enum: open ×60 (60%), closed ×40 (40%)" in out
     assert "`id`: string" in out and "enum" not in out.split("`id`")[1]
     # few unique rows -> no enum
     out2 = render_profile(profile_records([{"a": "x"}, {"a": "y"}]), 3)
@@ -169,7 +169,7 @@ def test_xlsx_levels(tmp_path):
     outs = _all_levels(p, tmp_path)
     _assert_monotonic(outs)
     assert "`price`" in outs[0]
-    assert "enum: open (67%), closed (33%)" in outs[2]
+    assert "enum: open ×200 (67%), closed ×100 (33%)" in outs[2]
     assert "| 299 | product number 299 | 448.5 | open |" in outs[3]
     assert "| 299 | product number 299 | 448.5 | open |" in outs[4]
     assert "| 1 | a\\|b |" in outs[2]
@@ -205,9 +205,12 @@ def test_map_like_dict_is_profiled_not_listed(tmp_path):
     for level in (2, 3):
         out = _convert(f, tmp_path, level)
         assert "300 entries" in out
-        assert "node_modules/p0" in out and "node_modules/p150" not in out   # examples, not every key
         assert "`version`" in out and "`resolved`" in out and "`dev`" in out
-        assert len(out) < 2500
+    l2 = _convert(f, tmp_path, 2)
+    assert "node_modules/p150" not in l2 and len(l2) < 2500          # level 2: examples only
+    l3 = _convert(f, tmp_path, 3)
+    assert "p150: 1.150.0" in l3                                       # level 3: version index
+    assert len(l3) < len(json.dumps(_lock())) / 2
     l3 = _convert(f, tmp_path, 3)
     assert "`dev`: boolean = true, 38/300" in l3
 

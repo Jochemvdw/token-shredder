@@ -104,6 +104,9 @@ class CodeConverter(BaseConverter):
                 head = f"class {node.name}({bases})" if bases and level >= 2 else f"class {node.name}"
                 parts.append(f"## {head}")
                 self._add_doc(parts, node, level)
+                attrs = self._class_attributes(node, level)
+                if attrs and level >= 2:
+                    parts.append(f"- attributes: {attrs}")
                 for item in node.body:
                     if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         private = self._py_private(item.name)
@@ -123,6 +126,32 @@ class CodeConverter(BaseConverter):
                     self._add_doc(parts, node, level)
                 parts.append("")
         return parts
+
+    @staticmethod
+    def _class_attributes(node, level: int) -> str:
+        """Enum members, dataclass fields and class constants, in order."""
+        out = []
+        for item in node.body:
+            target, value, ann = None, None, None
+            if isinstance(item, ast.Assign) and len(item.targets) == 1 \
+                    and isinstance(item.targets[0], ast.Name):
+                target, value = item.targets[0].id, item.value
+            elif isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+                target, value, ann = item.target.id, item.value, item.annotation
+            if not target or (target.startswith("_") and not target.startswith("__")) \
+                    or target.startswith("__"):
+                continue
+            text = target
+            if ann is not None and level >= 3:
+                text += f": {ast.unparse(ann)}"
+            if value is not None and level >= 3:
+                v = ast.unparse(value)
+                if len(v) <= 40:
+                    text += f" = {v}"
+            out.append(text)
+        if len(out) > 40 and level < 4:
+            out = out[:40] + [f"… {len(out) - 40} more"]
+        return ", ".join(out)
 
     @staticmethod
     def _py_private(name: str) -> bool:
@@ -192,9 +221,15 @@ class CodeConverter(BaseConverter):
         level = options.detail_level
         lines = source.splitlines()
         ext = self._get_ext(file_path)
-        if lines and (len(source) / len(lines) > 300 or max(map(len, lines)) > 5000):
+        # Minified/bundled code: almost all bytes sit in very long lines. (One long data
+        # line in a normal source file, e.g. a Unicode table, doesn't count.)
+        nonempty = [ln for ln in lines if ln.strip()]
+        long_lines = [ln for ln in nonempty if len(ln) > 500]
+        if nonempty and (len(long_lines) > 0.5 * len(nonempty)
+                         or (len(nonempty) <= 5 and sum(map(len, long_lines)) > 0.8 * len(source))):
             return [f"Minified or bundled code ({len(source) // 1024:,} KB on {len(lines):,} lines): "
                     "no outline possible. Use --detail-level 5 for the full source."]
+        lines = [ln if len(ln) <= 500 else ln[:200] + " …" for ln in lines]
         parts = [f"## Declarations ({len(lines)} lines)"]
         seen_docs, names = set(), {}
         for i, line in enumerate(lines):

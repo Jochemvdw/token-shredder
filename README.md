@@ -65,22 +65,22 @@ Real public files at the default detail level, tokens counted with tiktoken `cl1
 | IRS form W-9 (PDF) | 9,009 | 9,058 | 8,417 | **7%** | 100% |
 | Calibre demo document (DOCX) | 2,386 | 2,943 | 2,525 | −6% | 100% |
 | Wikipedia "Python" article (HTML; raw page 325,067) | 27,535 | 71,099 | 9,684 | **65%** | 58% ¹ |
-| `requests/sessions.py` (Python) | 7,336 | — | 1,179 | **84%** | 27% |
+| `requests/sessions.py` (Python) | 7,336 | — | 1,288 | **82%** | 28% |
 | Express `router/index.js` (JS) | 3,859 | — | 223 | **94%** | 17% |
-| GitHub issues API, 10 issues (JSON) | 15,234 | — | 828 | **95%** | 11% |
+| GitHub issues API, 10 issues (JSON) | 15,234 | — | 1,115 | **93%** | 20% |
 | GitHub repo API response (JSON) | 1,863 | — | 915 | **51%** | 52% |
-| Airport codes, 86,343 rows, 8.8 MB (CSV) | 3,841,232 | — | 799 | **99.98%** | profile |
+| Airport codes, 86,343 rows, 8.8 MB (CSV) | 3,841,232 | — | 887 | **99.98%** | profile |
 
 ¹ The article text is kept; the reference list, "See also" and external links are dropped at the default level (`-d 4` keeps them).
 
-Across a wider test set of 98 public files (papers, RFCs, READMEs, web pages, code in 6 languages, lock files, feeds, spreadsheets, configs; `benchmarks/robustness.py`), the default level produces 466,634 tokens from 17.3 million, with no crashes, budget overruns or size inversions.
+Across a wider test set of 98 public files (papers, RFCs, READMEs, web pages, code in 6 languages, lock files, feeds, spreadsheets, configs; `benchmarks/robustness.py`), the default level produces 492,638 tokens from 17.3 million, with no crashes, budget overruns or size inversions. In a question-answering check (60 questions about 12 of those files, answered by a model that only saw the default output) 51 of 60 answers were fully right. The misses are what an outline drops by design — how a function works inside, which row holds a maximum — and need `--detail-level 4` or `5`.
 
 What this means:
 
 - **PDF / DOCX / text:** cleaned text — broken lines and split words rejoined, page headers/footers and page numbers removed — 5–7% below plain extraction and 14–21% below MarkItDown. For real compression use a lower level: `-d 2` gives headings plus the first sentence of each paragraph (about 40% of the text), `-d 1` the outline.
 - **HTML:** the main content in page order — headings, paragraphs, lists, tables; navigation, cookie banners, scripts, link URLs and reference sections dropped. 14% of MarkItDown's size on the Wikipedia page.
 - **Code:** an outline — classes, methods and functions with signatures and the first sentence of each doc comment; private helpers listed without docs. Good for "what is in this file and how do I call it?", not for editing or debugging (use `-d 5`). Python uses the real parser; other languages use pattern matching.
-- **Data files (JSON, JSONL, CSV, Excel):** a profile — row count, and per field its type, range, length, example values and the values of category-like fields. An 8.8 MB CSV becomes one page. If the profile would not be smaller than the data, you get the data itself (minified JSON / CSV), as with the repo response above. `-d 4` always gives all the data.
+- **Data files (JSON, JSONL, CSV, Excel):** a profile — row count, and per field its type, range, mean, length, example values and category counts — plus an index line per record (issue number + title, package + version; up to a few hundred records). An 8.8 MB CSV becomes one page. If the profile would not be smaller than the data, you get the data itself (minified JSON / CSV), as with the repo response above. `-d 4` always gives all the data.
 
 The token report the CLI prints uses the same baseline, except for HTML, where it compares with the raw page. Reproduce the table with [`benchmarks/`](benchmarks/).
 
@@ -108,6 +108,7 @@ PDF, DOCX, PPTX, XLSX, HTML, Markdown, TXT, CSV, JSON, JSON5, YAML, TOML, INI, X
 - Converting a `.md` file writes `name.shredded.md`; the input is never overwritten.
 - `batch` skips hidden folders and dependency/build folders (`node_modules`, `venv`, `dist`, `build`, `target`, `vendor`, ...).
 - Text that isn't UTF-8 is read as Windows-1252 (UTF-16 and BOMs are detected).
+- Output is meant for AI models, so well-known credential formats (API keys, tokens, private keys) are replaced by `[REDACTED: kind]`, `.env` values are never shown, and `batch` skips files named like secrets/credentials. `--keep-secrets` turns redaction off. This is a safety net, not a guarantee.
 - `convert` caches results for an hour in `~/.token-shredder/cache`; use `--no-cache` to skip it.
 
 ## HTTP API (optional)

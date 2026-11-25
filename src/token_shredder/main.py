@@ -23,9 +23,10 @@ from token_shredder.utils.file_handler import FileHandler
 from token_shredder.utils.logger import setup_logger, set_log_level
 from token_shredder.models import ConversionResult, ConversionOptions, ProcessingOptions
 from token_shredder.config import Config, CacheManager
+from token_shredder.secrets import redact
 
 console = Console()
-err_console = Console(stderr=True)
+err_console = Console(stderr=True, soft_wrap=True)
 logger = setup_logger(__name__)
 
 # Reusable processors
@@ -37,6 +38,8 @@ _quality_scorer = QualityScorer()
 
 
 BINARY_FORMATS = {'pdf', 'docx', 'pptx', 'xlsx', 'xls'}
+# .env files: values are hidden at every level, the raw file is never output.
+SECRET_FORMATS = {'env'}
 PROSE_FORMATS = {'pdf', 'docx', 'pptx', 'txt', 'md', 'html', 'htm', 'log'}
 CODE_FORMATS = {'python', 'py', 'js', 'ts', 'tsx', 'jsx', 'mjs', 'cjs', 'java', 'go', 'rs',
                 'c', 'cpp', 'cc', 'cxx'}
@@ -52,6 +55,14 @@ DETAIL_LEVELS = {
 
 class ConversionError(Exception):
     """The file could not be converted; the message is meant for the user."""
+
+
+class BatchError(ConversionError):
+    """Some files in a batch failed; .results holds the ones that worked."""
+
+    def __init__(self, message: str, results: list):
+        super().__init__(message)
+        self.results = results
 
 
 def resolve_output_path(file_path: str, output_path: Optional[str]) -> Path:
@@ -157,7 +168,8 @@ class _Source:
         problem = FileHandler().check_file(file_path)
         if problem:
             raise ConversionError(problem)
-        self.path = file_path
+        self.path = file_path        # may be swapped for a UTF-8 temp copy below
+        self.original = file_path
         self.name = display_name or file_path
         self.format = file_format or detect_file_format(file_path)
         logger.info(f"Detected format: {self.format}")
@@ -196,7 +208,7 @@ def _convert_at_level(src: _Source, level: int, opts: dict, cache_enabled: bool)
         embed_images=opts["embed_images"],
         include_comments=opts["include_comments"],
     )
-    key = "|".join(str(opts[k]) for k in sorted(opts)) + f"|{level}|{src.format}|{_version()}"
+    key = "|".join(f"{k}={opts[k]}" for k in sorted(opts)) + f"|{level}|{src.format}|{_version()}"
     options_hash = hashlib.md5(key.encode()).hexdigest()
     cache_manager = Config().get_cache_manager() if cache_enabled else None
     cached = cache_manager.get(src.path, options_hash) if cache_manager else None
@@ -207,7 +219,7 @@ def _convert_at_level(src: _Source, level: int, opts: dict, cache_enabled: bool)
                                   format=src.format, detail_level=level)
         raw_markdown = cached
     else:
-        if level >= 5 and src.format not in BINARY_FORMATS:
+        if level >= 5 and src.format not in BINARY_FORMATS and src.format not in SECRET_FORMATS:
             # Level 5 = full content: the file itself, untouched.
             result = ConversionResult(markdown=full_text_markdown(src.path, src.format),
                                       source_file=src.name, target_file="",
@@ -230,6 +242,11 @@ def _convert_at_level(src: _Source, level: int, opts: dict, cache_enabled: bool)
                 result.markdown = _minify_code_blocks(result.markdown, src.format)
             if opts["optimize_structure"]:
                 result.markdown = _optimizer.process(result.markdown)
+        if opts.get("redact", True):
+            # Output goes to an AI model: replace well-known credential formats.
+            result.markdown, found = redact(result.markdown)
+            if found:
+                result.warnings = list(result.warnings) + [f"redacted: {', '.join(found)}"]
         if cache_manager:
             cache_manager.set(src.path, options_hash, result.markdown)
 
@@ -238,8 +255,13 @@ def _convert_at_level(src: _Source, level: int, opts: dict, cache_enabled: bool)
     result.detail_level = level
     result.source_tokens = src.baseline_tokens(raw_markdown)
     result.output_tokens = _token_counter.estimate(result.markdown)
-    if (level < 5 and src.format not in BINARY_FORMATS
-            and len(result.markdown) >= 0.7 * Path(src.path).stat().st_size):  # cheap pre-check
+    text_check = (src.format not in BINARY_FORMATS
+                  and len(result.markdown) >= 0.7 * Path(src.path).stat().st_size)
+    # Documents: cleaned text can end up a few tokens longer than the raw extraction
+    # (list markers, table pipes). Compare for small files, where it is cheap.
+    doc_check = (src.format in BINARY_FORMATS and level >= 3
+                 and Path(src.path).stat().st_size <= 2_000_000)
+    if (level < 5 and src.format not in SECRET_FORMATS and (text_check or doc_check)):
         # Never worse than pasting the file itself: if a summary is not smaller
         # than the full content (level 5), give the full content.
         full = _convert_at_level(src, 5, opts, cache_enabled)
@@ -303,6 +325,7 @@ def convert_file(
     max_tokens: Optional[int] = None,
     display_name: Optional[str] = None,
     file_format: Optional[str] = None,
+    redact_secrets: bool = True,
 ) -> ConversionResult:
     """Convert a file to markdown.
 
@@ -320,7 +343,8 @@ def convert_file(
     output_file = resolve_output_path(file_path, output_path) if write_output else None
     opts = dict(preserve_images=preserve_images, embed_images=embed_images,
                 include_comments=include_comments, deduplicate=deduplicate,
-                minify_code=minify_code, optimize_structure=optimize_structure)
+                minify_code=minify_code, optimize_structure=optimize_structure,
+                redact=redact_secrets)
 
     if max_tokens is not None:
         result = _fit_budget(src, detail_level or 5, max_tokens, opts, cache_enabled)
@@ -388,7 +412,16 @@ SKIP_DIRS = {'node_modules', 'venv', 'env', '__pycache__', 'site-packages', 'dis
              '.pytest_cache', '.git', '.hg', '.svn'}
 
 
-def find_batch_files(directory: str) -> List[Path]:
+_SECRET_NAME = re.compile(r"secret|credential|service[-_]?account|passw|private[-_]?key|token",
+                          re.IGNORECASE)
+
+
+def looks_secret(name: str) -> bool:
+    """File names that usually hold credentials; batch skips them."""
+    return bool(_SECRET_NAME.search(name)) or name.lower().endswith(".env")
+
+
+def find_batch_files(directory: str, skipped: Optional[list] = None) -> List[Path]:
     """Supported files under directory (recursive), skipping hidden folders,
     dependency/build folders (node_modules, venv, dist, ...) and earlier batch output."""
     import os
@@ -405,6 +438,15 @@ def find_batch_files(directory: str) -> List[Path]:
             if suffixes[-2:-1] and suffixes[-1] == '.md' and suffixes[-2] in SUPPORTED_SUFFIXES:
                 continue  # "report.pdf.md": output of an earlier batch run
             if not (f.suffix.lower() in SUPPORTED_SUFFIXES or name.lower() in SUPPORTED_NAMES):
+                continue
+            try:
+                if f.stat().st_size == 0:
+                    continue  # empty files (__init__.py, .gitkeep-style) have nothing to say
+            except OSError:
+                continue
+            if looks_secret(name):
+                if skipped is not None:
+                    skipped.append(f)
                 continue
             if f.is_file():
                 files.append(f)
@@ -432,10 +474,21 @@ def _allocate_budget(sources: list, max_tokens: int, max_level: int, opts: dict,
     detail level that fits its share (truncated level 1 if nothing fits). Unused
     budget is then offered once more to the files that are still below their need.
     """
+    # Too many files for the budget (each needs ~100 tokens to say anything): keep the
+    # shallowest files (README, top-level modules) and leave the rest out, with a note.
+    per_file = 100 + header_tokens
+    if max_tokens < per_file * len(sources):
+        keep = max_tokens // per_file
+        if keep == 0:
+            raise ConversionError(f"--max-tokens {max_tokens:,} is too small for any file")
+        ranked = sorted(sources, key=lambda s: (len(Path(s.original).parts), s.original))
+        dropped = len(sources) - keep
+        sources[:] = ranked[:keep]
+        err_console.print(
+            f"Budget fits about {keep} of {keep + dropped} files: left out the {dropped} most "
+            "deeply nested. Use a bigger --max-tokens or a subfolder to include them.",
+            markup=False, highlight=False)
     budget = max_tokens - header_tokens * len(sources)
-    if budget < 50 * len(sources):
-        raise ConversionError(
-            f"--max-tokens {max_tokens:,} is too small for {len(sources)} files")
     need = [_convert_at_level(s, max_level, opts, cache_enabled).output_tokens for s in sources]
     alloc = [max(a, 50) for a in _waterfill(need, budget)]
     results = [_fit_budget(s, max_level, a, opts, cache_enabled) for s, a in zip(sources, alloc)]
@@ -475,6 +528,7 @@ def batch_convert(
     max_tokens: Optional[int] = None,
     write_output: bool = True,
     cache_enabled: bool = True,
+    redact_secrets: bool = True,
 ) -> List[ConversionResult]:
     """Convert every supported file under directory.
 
@@ -487,7 +541,11 @@ def batch_convert(
     from concurrent.futures import ThreadPoolExecutor
 
     root = Path(directory)
-    files = find_batch_files(directory)
+    skipped: list = []
+    files = find_batch_files(directory, skipped)
+    for f in skipped:
+        err_console.print(f"skipped {f.relative_to(root)} (name suggests secrets)", markup=False,
+                          highlight=False)
     if not files:
         err_console.print(f"[yellow]No supported files found in {directory}[/yellow]")
         return []
@@ -498,7 +556,8 @@ def batch_convert(
         return base.with_name(base.name + '.md')
 
     opts = dict(preserve_images=preserve_images, embed_images=False, include_comments=False,
-                deduplicate=True, minify_code=True, optimize_structure=True)
+                deduplicate=True, minify_code=True, optimize_structure=True,
+                redact=redact_secrets)
     failures = []
 
     def prepare(f: Path):
@@ -527,13 +586,13 @@ def batch_convert(
                        for s in sources]
 
     for src, r in zip(sources, results):
-        r.source_file = src.path
+        r.source_file = src.original
         if write_output:
-            out = target(Path(src.path))
+            out = target(Path(src.original))
             _write(out, r.markdown)
             r.target_file = str(out)
         if not quiet:
-            err_console.print(f"{Path(src.path).relative_to(root)} -> {r.target_file or '(combined)'} "
+            err_console.print(f"{Path(src.original).relative_to(root)} -> {r.target_file or '(combined)'} "
                               f"(level {r.detail_level}{', truncated' if any('truncated' in w for w in r.warnings) else ''}, {r.source_tokens:,} -> "
                               f"{r.output_tokens:,} tokens)", markup=False, highlight=False)
 
@@ -543,7 +602,7 @@ def batch_convert(
         err_console.print(f"\n{len(results)} converted, {len(failures)} failed. "
                           f"Tokens: {src_total:,} -> {out_total:,}")
     if failures:
-        raise ConversionError(f"{len(failures)} file(s) failed")
+        raise BatchError(f"{len(failures)} file(s) failed", results)
     return results
 
 
@@ -615,8 +674,16 @@ def _emit(results: List[ConversionResult], combined: str, *, to_stdout: bool, co
     if copy:
         _copy_to_clipboard(text)
     if to_stdout:
-        sys.stdout.write(text if text.endswith("\n") else text + "\n")
-        sys.stdout.flush()
+        out = text if text.endswith("\n") else text + "\n"
+        buffer = getattr(sys.stdout, "buffer", None)
+        if buffer is not None:
+            # Always UTF-8, also on Windows consoles/pipes that default to cp1252.
+            sys.stdout.flush()
+            buffer.write(out.encode("utf-8"))
+            buffer.flush()
+        else:
+            sys.stdout.write(out)
+            sys.stdout.flush()
 
 
 @app.command()
@@ -644,6 +711,8 @@ def convert(
     quiet: bool = typer.Option(False, '--quiet', '-q', help='Print nothing except errors'),
     verbose: bool = typer.Option(False, '--verbose', '-v', help='Show progress messages'),
     no_cache: bool = typer.Option(False, '--no-cache', help='Disable caching'),
+    keep_secrets: bool = typer.Option(
+        False, '--keep-secrets', help="Don't redact API keys, tokens and private keys"),
 ):
     """Convert a file, URL or stdin to compact markdown."""
     from token_shredder.sources import SourceError, fetch_url, is_url, read_stdin
@@ -679,6 +748,7 @@ def convert(
             write_output=write_file,
             display_name=materialized.name if materialized else None,
             file_format=materialized.format if materialized else None,
+            redact_secrets=not keep_secrets,
         )
         _run_cli(_emit, [result], result.markdown, to_stdout=to_stdout, copy=copy, as_json=as_json)
         if not quiet:
@@ -711,6 +781,8 @@ def batch(
     quiet: bool = typer.Option(False, '--quiet', '-q', help='Print nothing except errors'),
     verbose: bool = typer.Option(False, '--verbose', '-v', help='Show progress messages'),
     no_cache: bool = typer.Option(False, '--no-cache', help='Disable caching'),
+    keep_secrets: bool = typer.Option(
+        False, '--keep-secrets', help="Don't redact API keys, tokens and private keys"),
 ):
     """Convert all supported files in a folder, optionally within one token budget."""
     _set_verbosity(quiet, verbose)
@@ -719,18 +791,23 @@ def batch(
         raise typer.Exit(1)
     to_stdout = output == "-"
     combined_mode = to_stdout or copy or as_json
-    results = _run_cli(
-        batch_convert,
-        directory,
-        output_dir=None if combined_mode else output,
-        detail_level=detail_level,
-        workers=workers,
-        preserve_images=preserve_images,
-        quiet=quiet,
-        max_tokens=max_tokens,
-        write_output=not combined_mode,
-        cache_enabled=not no_cache,
-    )
+    failed = False
+    try:
+        results = _run_cli(
+            _batch_keep_partial,
+            directory,
+            output_dir=None if combined_mode else output,
+            detail_level=detail_level,
+            workers=workers,
+            preserve_images=preserve_images,
+            quiet=quiet,
+            max_tokens=max_tokens,
+            write_output=not combined_mode,
+            cache_enabled=not no_cache,
+            redact_secrets=not keep_secrets,
+        )
+    except _PartialBatch as e:  # some files failed: still output the rest, then exit 1
+        results, failed = e.results, True
     if combined_mode and results:
         root = Path(directory).resolve()
         for r in results:
@@ -740,6 +817,8 @@ def batch(
                  copy=copy, as_json=as_json)
         if copy and not quiet:
             err_console.print(f"Copied {_token_counter.estimate(combined):,} tokens to the clipboard.")
+    if failed:
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -757,13 +836,27 @@ def version():
     console.print(f"Token Shredder v{_v('token-shredder')}")
 
 
+class _PartialBatch(Exception):
+    def __init__(self, results):
+        self.results = results
+
+
+def _batch_keep_partial(*args, **kwargs):
+    """batch_convert, but a BatchError becomes _PartialBatch so the CLI can still
+    output the files that worked."""
+    try:
+        return batch_convert(*args, **kwargs)
+    except BatchError as e:
+        raise _PartialBatch(e.results) from e
+
+
 def _run_cli(func, *args, **kwargs):
     """Run a library call; show ConversionError as a one-line message and exit 1."""
     try:
         return func(*args, **kwargs)
     except ConversionError as e:
         # batch_convert already printed each failed file; its summary error is enough.
-        if not (func is batch_convert and str(e).endswith("file(s) failed")):
+        if not str(e).endswith("file(s) failed"):
             err_console.print(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(1)
 

@@ -33,7 +33,7 @@ class GitignoreConverter(BaseConverter):
             with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                 lines = f.readlines()
 
-            markdown_parts.append(f"# {file_path}")
+            markdown_parts.append(f"# {Path(file_path).name}")
             markdown_parts.append("")
 
             # Categorize patterns

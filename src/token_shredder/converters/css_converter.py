@@ -33,7 +33,7 @@ class CSSConverter(BaseConverter):
             with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                 content = f.read()
 
-            markdown_parts.append(f"# CSS Stylesheet: {file_path}")
+            markdown_parts.append(f"# CSS Stylesheet: {Path(file_path).name}")
             markdown_parts.append("")
 
             # Parse CSS rules

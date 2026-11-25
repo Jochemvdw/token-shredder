@@ -88,3 +88,33 @@ def test_summary_never_larger_than_file(tmp_path):
     f.write_text("a: 1\n")
     outs = [_md(f, lv) for lv in range(1, 6)]
     assert all(len(o) <= len(outs[4]) for o in outs)
+
+
+def test_long_data_line_is_not_minified(tmp_path):
+    code = "export function a() {\n}\n" * 30 + "const TABLE = '" + "x" * 20000 + "';\n" + \
+        "export function b(x: number): number {\n}\n"
+    out = _outline(tmp_path, "s.ts", code)
+    assert "Minified" not in out and "function b" in out
+
+
+def test_python_class_attributes(tmp_path):
+    out = _outline(tmp_path, "e.py", "import enum\nclass Color(enum.Enum):\n    RED = 1\n    GREEN = 2\n")
+    assert "RED = 1" in out and "GREEN = 2" in out
+
+
+def test_json_records_get_an_index(tmp_path):
+    import json
+    f = tmp_path / "issues.json"
+    f.write_text(json.dumps([{"number": 10 + i, "title": f"Bug number {i} in parser",
+                              "body": "long text " * 30} for i in range(40)]))
+    md = _md(f)
+    assert "10: Bug number 0 in parser" in md and "49: Bug number 39 in parser" in md
+    assert md.count("long text") < 20  # bodies are profiled, not copied
+
+
+def test_csv_profile_counts_and_mean(tmp_path):
+    rows = "\n".join(f"{i},{'yes' if i % 3 else 'no'},{i * 2}" for i in range(300))
+    f = tmp_path / "d.csv"
+    f.write_text("id,flag,val\n" + rows + "\n")
+    md = _md(f)
+    assert "yes ×200" in md and "no ×100" in md and "mean" in md

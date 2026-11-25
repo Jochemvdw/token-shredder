@@ -8,7 +8,7 @@ from typing import Optional
 from token_shredder.converters.base_converter import BaseConverter
 from token_shredder.models import ConversionResult, ConversionOptions
 from token_shredder.utils.logger import setup_logger
-from token_shredder.profiling import minify_json_text, profile_records, render_fields, example, map_kind, describe_map, clamp_levels, is_id_like
+from token_shredder.profiling import record_index, minify_json_text, profile_records, render_fields, example, map_kind, describe_map, clamp_levels, is_id_like
 
 logger = setup_logger(__name__)
 
@@ -51,7 +51,7 @@ class JSONConverter(BaseConverter):
                 self._schema(data, lines, indent=0, depth=1, max_depth=1 if lv == 1 else 3,
                              examples=lv >= 3, level=lv)
                 lines.append("")
-                lines.append("_Schema only; use `--detail-level 4` for the data._")
+                lines.append("_Summary; use `--detail-level 4` for the data._")
                 return "\n".join(lines)
 
             # Never longer than the minified data, never smaller than the level below.
@@ -88,7 +88,11 @@ class JSONConverter(BaseConverter):
             if isinstance(value, list) and any(isinstance(x, dict) for x in value):
                 self._profile_list(value, lines, indent + 1, level)
             elif depth < max_depth and isinstance(value, (dict, list)):
-                self._schema(value, lines, indent + 1, depth + 1, max_depth, examples, level)
+                sub_level = level
+                if key == "dependencies" and isinstance(data.get("packages"), dict) \
+                        and "lockfileVersion" in data:
+                    sub_level = min(level, 2)  # npm v2 lockfile: legacy copy of "packages"
+                self._schema(value, lines, indent + 1, depth + 1, max_depth, examples, sub_level)
 
     @staticmethod
     def _map(data, kind, lines, indent, level):
@@ -110,6 +114,9 @@ class JSONConverter(BaseConverter):
         lines.append(f"{pad}- each item ({len(data):,} items):")
         for fl in render_fields(profile, level):
             lines.append(pad + "  " + fl)
+        if level >= 3:
+            for il in record_index(list(enumerate(data))):
+                lines.append(pad + "  " + il)
 
     @staticmethod
     def _example(value) -> str:

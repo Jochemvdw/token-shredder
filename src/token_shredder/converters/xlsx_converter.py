@@ -2,6 +2,8 @@
 token_shredder - XLSX Converter
 Converts Excel spreadsheets to markdown tables
 """
+import os
+
 from openpyxl import load_workbook
 from pathlib import Path
 from typing import Optional
@@ -33,20 +35,26 @@ class XLSXConverter(BaseConverter):
     def convert_to_markdown(self, file_path: str, options: ConversionOptions) -> str:
         markdown_parts = []
         try:
-            wb = load_workbook(file_path, data_only=True)
-            try:
-                wb_formulas = load_workbook(file_path, data_only=False)
-            except Exception:
-                wb_formulas = None
+            # read_only streams rows instead of building every cell object: ~10x faster
+            # on big sheets. The second (formula) pass is only needed for cells without
+            # a cached value, which happens in small generated files, so skip it for big ones.
+            wb = load_workbook(file_path, data_only=True, read_only=True)
+            wb_formulas = None
+            if os.path.getsize(file_path) <= 2_000_000:
+                try:
+                    wb_formulas = load_workbook(file_path, data_only=False, read_only=True)
+                except Exception:
+                    wb_formulas = None
 
-            markdown_parts.append(f"# Excel Spreadsheet: {file_path}")
+            markdown_parts.append(f"# Excel Spreadsheet: {Path(file_path).name}")
             markdown_parts.append(f"- Sheets: {len(wb.sheetnames)}")
             markdown_parts.append("")
 
             for sheet_name in wb.sheetnames:
                 ws = wb[sheet_name]
                 markdown_parts.append(f"## Sheet: {sheet_name}")
-                markdown_parts.append(f"- Rows: {ws.max_row}, Columns: {ws.max_column}")
+                if ws.max_row and ws.max_column:
+                    markdown_parts.append(f"- Rows: {ws.max_row}, Columns: {ws.max_column}")
                 markdown_parts.append("")
 
                 if ws.max_row == 0 or ws.max_column == 0:
@@ -61,6 +69,11 @@ class XLSXConverter(BaseConverter):
         except Exception as e:
             logger.debug(f"Error reading XLSX: {e}")
             markdown_parts.append(f"[Error reading XLSX: {e}]")
+
+        finally:
+            for book in (locals().get("wb"), locals().get("wb_formulas")):
+                if book is not None:
+                    book.close()
 
         return "\n".join(markdown_parts)
 
@@ -83,7 +96,9 @@ class XLSXConverter(BaseConverter):
                         if v is None and i < len(frow) and isinstance(frow[i], str) and frow[i].startswith('='):
                             values[i] = frow[i]
                 cells = [self._cell_text(c) for c in values]
-                if all(c == '' for c in cells):
+                while cells and cells[-1] == '':
+                    cells.pop()  # read-only mode pads rows to the sheet width
+                if not cells:
                     continue
                 yield cells
 
@@ -95,7 +110,7 @@ class XLSXConverter(BaseConverter):
 
     def get_file_info(self, file_path: str) -> dict:
         try:
-            wb = load_workbook(file_path, data_only=True)
+            wb = load_workbook(file_path, data_only=True, read_only=True)
             total_rows = sum(ws.max_row for ws in wb.worksheets)
             total_cols = sum(ws.max_column for ws in wb.worksheets)
             return {

@@ -33,7 +33,7 @@ class LOGConverter(BaseConverter):
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 lines = f.readlines()
 
-            markdown_parts.append(f"# Log File: {file_path}")
+            markdown_parts.append(f"# Log File: {Path(file_path).name}")
             markdown_parts.append(f"- Total lines: {len(lines)}")
             markdown_parts.append("")
 

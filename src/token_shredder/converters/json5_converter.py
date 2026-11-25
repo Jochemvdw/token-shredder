@@ -34,7 +34,7 @@ class JSON5Converter(BaseConverter):
             with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                 data = json5.load(f)
 
-            markdown_parts.append(f"# JSON5: {file_path}")
+            markdown_parts.append(f"# JSON5: {Path(file_path).name}")
             markdown_parts.append("")
             markdown_parts.append(self._data_to_markdown(data))
 

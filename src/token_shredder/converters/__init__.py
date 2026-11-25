@@ -96,5 +96,12 @@ def __getattr__(name):
 def detect_file_format(file_path: str) -> str:
     """Detect file format from extension."""
     import os
+    name = os.path.basename(file_path).lower()
+    if name in ("dockerfile", "containerfile") or name.startswith("dockerfile."):
+        return "dockerfile"
+    if name in ("makefile", "gnumakefile"):
+        return "makefile"
+    if name in (".gitignore", ".dockerignore", ".gitattributes"):
+        return name.lstrip(".")
     ext = os.path.splitext(file_path)[1].lower().lstrip('.')
     return ext
