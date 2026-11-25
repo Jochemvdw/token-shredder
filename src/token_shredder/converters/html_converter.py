@@ -51,7 +51,7 @@ class HTMLConverter(BaseConverter):
             with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                 soup = BeautifulSoup(f.read(), 'html.parser')
         except Exception as e:
-            logger.error(f"Error reading HTML: {e}")
+            logger.debug(f"Error reading HTML: {e}")
             return f"[Error reading HTML: {e}]"
 
         for tag in soup(self._DROP):

@@ -33,8 +33,18 @@ class SourceError(Exception):
     pass
 
 
+_BINARY = {"pdf", "docx", "pptx", "xlsx", "xls"}
+
+
 def is_url(source: str) -> bool:
     return bool(re.match(r"^https?://", source, re.IGNORECASE))
+
+
+def _looks_binary(head: bytes) -> bool:
+    if b"\x00" in head:
+        return True
+    control = sum(1 for b in head if b < 9 or 13 < b < 32)
+    return bool(head) and control / len(head) > 0.1
 
 
 def sniff_format(head: bytes) -> str:
@@ -78,12 +88,26 @@ def fetch_url(url: str, file_format: Optional[str] = None, timeout: int = 30) ->
     """Download url (http/https only, max 50 MB) to a temp file."""
     if not is_url(url):
         raise SourceError(f"Not an http(s) URL: {url}")
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "*/*"})
+    import time
+    deadline = time.monotonic() + timeout * 2  # total time, not just per read
     try:
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "*/*"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = resp.read(MAX_DOWNLOAD_BYTES + 1)
+            chunks, total = [], 0
+            while total <= MAX_DOWNLOAD_BYTES:
+                chunk = resp.read(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                total += len(chunk)
+                if time.monotonic() > deadline:
+                    raise SourceError(f"Download of {url} took longer than {timeout * 2} s")
+            data = b"".join(chunks)
             content_type = (resp.headers.get_content_type() or "").lower()
+            charset = resp.headers.get_content_charset()
             final_url = resp.geturl()
+    except SourceError:
+        raise
     except Exception as e:
         raise SourceError(f"Could not download {url}: {e}") from e
     if len(data) > MAX_DOWNLOAD_BYTES:
@@ -93,6 +117,11 @@ def fetch_url(url: str, file_format: Optional[str] = None, timeout: int = 30) ->
     fmt = (file_format or _CONTENT_TYPES.get(content_type)
            or (suffix if suffix and len(suffix) <= 5 else None) or sniff_format(data[:4096]))
     stem = Path(path_part).stem or urlparse(final_url).netloc
+    if charset and fmt not in _BINARY and charset.lower().replace("_", "-") not in ("utf-8", "utf8"):
+        try:
+            data = data.decode(charset, errors="replace").encode("utf-8")
+        except LookupError:
+            pass  # unknown charset name: keep the bytes, the converter will cope
     path, tmp_dir = _write_tmp(data, fmt, stem)
     return Materialized(path, url, fmt, tmp_dir)
 
@@ -104,5 +133,7 @@ def read_stdin(stream, file_format: Optional[str] = None) -> Materialized:
     if not data.strip():
         raise SourceError("stdin is empty")
     fmt = file_format or sniff_format(data[:4096])
+    if fmt == "txt" and _looks_binary(data[:4096]):
+        raise SourceError("stdin looks like binary data of an unknown type; pass --type (e.g. --type pdf)")
     path, tmp_dir = _write_tmp(data, fmt, "stdin")
     return Materialized(path, "stdin", fmt, tmp_dir)

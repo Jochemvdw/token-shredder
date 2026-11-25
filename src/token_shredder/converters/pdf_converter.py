@@ -60,7 +60,7 @@ class PDFConverter(BaseConverter):
                         markdown_parts.append(f"- Page {i+1}: {len(reader.pages[i]._images)} images")
 
         except Exception as e:
-            logger.error(f"Error reading PDF: {e}")
+            logger.debug(f"Error reading PDF: {e}")
             markdown_parts.append(f"[Error reading PDF: {e}]")
 
         return "\n".join(markdown_parts)

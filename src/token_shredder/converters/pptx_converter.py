@@ -77,7 +77,7 @@ class PPTXConverter(BaseConverter):
                 return self._render_full(blocks)
             return levels_output(lambda lv: self._render(blocks, lv), level)
         except Exception as e:
-            logger.error(f"Error reading PPTX: {e}")
+            logger.debug(f"Error reading PPTX: {e}")
             return f"[Error reading PPTX: {e}]"
 
     @staticmethod

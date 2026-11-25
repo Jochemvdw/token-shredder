@@ -60,7 +60,7 @@ class CSVConverter(BaseConverter):
                     body = "\n" + body
             return body
         except Exception as e:
-            logger.error(f"Error reading CSV: {e}")
+            logger.debug(f"Error reading CSV: {e}")
             return f"[Error reading CSV: {e}]"
 
     @staticmethod

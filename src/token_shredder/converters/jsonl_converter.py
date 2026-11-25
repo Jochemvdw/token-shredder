@@ -78,7 +78,7 @@ class JSONLConverter(BaseConverter):
                 return render(level)
             return clamp_levels(render, level, self._full(file_path, note_text))
         except Exception as e:
-            logger.error(f"Error reading JSONL: {e}")
+            logger.debug(f"Error reading JSONL: {e}")
             return f"[Error: {e}]"
 
     def _full(self, file_path: str, note_text: str) -> str:

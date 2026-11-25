@@ -80,7 +80,7 @@ class GitignoreConverter(BaseConverter):
                 markdown_parts.append("")
 
         except Exception as e:
-            logger.error(f"Error reading gitignore: {e}")
+            logger.debug(f"Error reading gitignore: {e}")
             markdown_parts.append(f"[Error reading gitignore: {e}]")
 
         return "\n".join(markdown_parts)

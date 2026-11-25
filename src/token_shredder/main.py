@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional, List
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -68,8 +69,11 @@ def resolve_output_path(file_path: str, output_path: Optional[str]) -> Path:
 
 
 def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding='utf-8')
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
+    except OSError as e:
+        raise ConversionError(f"Cannot write {path}: {e.strerror or e}") from e
 
 
 def _version() -> str:
@@ -106,6 +110,45 @@ def _truncate_to_tokens(text: str, max_tokens: int) -> str:
     return cut.rstrip() + note
 
 
+_TEMP_DIRS: List[str] = []
+
+
+def _cleanup_temp_dirs() -> None:
+    import shutil
+    for d in _TEMP_DIRS:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _as_utf8(file_path: str) -> str:
+    """Path to a UTF-8 version of a text file.
+
+    Files that already are UTF-8 (without BOM) are used as-is. Otherwise a BOM is
+    dropped, UTF-16 is decoded, and other bytes are read as Windows-1252 (the usual
+    encoding of non-UTF-8 text from Windows/Excel), into a temporary copy.
+    """
+    import atexit
+    import tempfile
+    data = Path(file_path).read_bytes()
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        text, how = data.decode("utf-16", errors="replace"), "UTF-16"
+    elif data.startswith(b"\xef\xbb\xbf"):
+        text, how = data[3:].decode("utf-8", errors="replace"), "UTF-8 with BOM"
+    else:
+        try:
+            data.decode("utf-8")
+            return file_path
+        except UnicodeDecodeError:
+            text, how = data.decode("cp1252", errors="replace"), "Windows-1252"
+    if not _TEMP_DIRS:
+        atexit.register(_cleanup_temp_dirs)
+    tmp_dir = tempfile.mkdtemp(prefix="token-shredder-")
+    _TEMP_DIRS.append(tmp_dir)
+    out = Path(tmp_dir) / Path(file_path).name
+    out.write_text(text, encoding="utf-8")
+    logger.info(f"{file_path}: not UTF-8, read as {how}")
+    return str(out)
+
+
 class _Source:
     """A file, prepared for conversion: format, converter, cache key parts."""
 
@@ -125,8 +168,12 @@ class _Source:
                 "See docs/FILE_FORMATS.md for the supported types."
             )
         size = Path(file_path).stat().st_size
+        if size == 0:
+            raise ConversionError(f"File is empty: {self.name}")
         if size > 1_000_000:
             logger.info(f"Large file ({size:,} bytes); this may take a few seconds")
+        if self.format not in BINARY_FORMATS:
+            self.path = _as_utf8(file_path)
         self._baseline_tokens: Optional[int] = None
         self._results: dict = {}
 
@@ -335,20 +382,32 @@ SUPPORTED_SUFFIXES = {
     '.dockerfile', '.mk', '.c', '.cpp', '.cc', '.cxx', '.h', '.hpp', '.hh', '.hxx',
 }
 SUPPORTED_NAMES = {'dockerfile', 'makefile', '.gitignore', '.dockerignore'}
+# Folders that hold dependencies, environments or build output, not the user's files.
+SKIP_DIRS = {'node_modules', 'venv', 'env', '__pycache__', 'site-packages', 'dist', 'build',
+             'target', 'vendor', 'bower_components', '.venv', '.tox', '.mypy_cache',
+             '.pytest_cache', '.git', '.hg', '.svn'}
 
 
 def find_batch_files(directory: str) -> List[Path]:
-    """Supported files under directory (recursive), skipping earlier batch output."""
+    """Supported files under directory (recursive), skipping hidden folders,
+    dependency/build folders (node_modules, venv, dist, ...) and earlier batch output."""
+    import os
     files = []
-    for f in sorted(Path(directory).rglob('*')):
-        if not f.is_file() or any(part.startswith('.') and part not in SUPPORTED_NAMES
-                                  for part in f.relative_to(directory).parts):
-            continue
-        suffixes = [s.lower() for s in f.suffixes]
-        if suffixes[-2:-1] and suffixes[-1] == '.md' and suffixes[-2] in SUPPORTED_SUFFIXES:
-            continue  # "report.pdf.md": output of an earlier batch run
-        if f.suffix.lower() in SUPPORTED_SUFFIXES or f.name.lower() in SUPPORTED_NAMES:
-            files.append(f)
+    for root, dirs, names in os.walk(directory):  # does not follow symlinked folders
+        dirs[:] = sorted(d for d in dirs
+                         if not d.startswith('.') and d.lower() not in SKIP_DIRS
+                         and not d.endswith('.egg-info'))
+        for name in sorted(names):
+            f = Path(root) / name
+            if name.startswith('.') and name.lower() not in SUPPORTED_NAMES:
+                continue
+            suffixes = [x.lower() for x in f.suffixes]
+            if suffixes[-2:-1] and suffixes[-1] == '.md' and suffixes[-2] in SUPPORTED_SUFFIXES:
+                continue  # "report.pdf.md": output of an earlier batch run
+            if not (f.suffix.lower() in SUPPORTED_SUFFIXES or name.lower() in SUPPORTED_NAMES):
+                continue
+            if f.is_file():
+                files.append(f)
     return files
 
 
@@ -450,7 +509,7 @@ def batch_convert(
             return src
         except Exception as e:
             failures.append(f)
-            err_console.print(f"[red]{e}[/red]")
+            err_console.print(f"[red]{escape(str(e))}[/red]")
             return None
 
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"),
@@ -597,7 +656,7 @@ def convert(
         elif is_url(source):
             materialized = fetch_url(source, input_type)
     except SourceError as e:
-        err_console.print(f"[red]{e}[/red]")
+        err_console.print(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(1)
 
     try:
@@ -647,7 +706,7 @@ def batch(
     copy: bool = typer.Option(False, '--copy', '-c',
                               help="Copy one combined document to the clipboard"),
     as_json: bool = typer.Option(False, '--json', help="Output JSON instead of markdown"),
-    workers: int = typer.Option(4, '--workers', '-w', help='Parallel workers'),
+    workers: int = typer.Option(4, '--workers', '-w', min=1, max=64, help='Parallel workers'),
     preserve_images: bool = typer.Option(False, '--preserve-images', help='Preserve images'),
     quiet: bool = typer.Option(False, '--quiet', '-q', help='Print nothing except errors'),
     verbose: bool = typer.Option(False, '--verbose', '-v', help='Show progress messages'),
@@ -703,8 +762,9 @@ def _run_cli(func, *args, **kwargs):
     try:
         return func(*args, **kwargs)
     except ConversionError as e:
-        if func is not batch_convert:  # batch already printed each failure
-            err_console.print(f"[red]{e}[/red]")
+        # batch_convert already printed each failed file; its summary error is enough.
+        if not (func is batch_convert and str(e).endswith("file(s) failed")):
+            err_console.print(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(1)
 
 

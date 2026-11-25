@@ -55,7 +55,7 @@ class SQLConverter(BaseConverter):
                 markdown_parts.append("")
 
         except Exception as e:
-            logger.error(f"Error reading SQL: {e}")
+            logger.debug(f"Error reading SQL: {e}")
             markdown_parts.append(f"[Error reading SQL: {e}]")
 
         return "\n".join(markdown_parts)

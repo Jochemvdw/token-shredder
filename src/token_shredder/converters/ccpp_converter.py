@@ -78,7 +78,7 @@ class CCppConverter(BaseConverter):
                 markdown_parts.append("")
 
         except Exception as e:
-            logger.error(f"Error reading C/C++ file: {e}")
+            logger.debug(f"Error reading C/C++ file: {e}")
             markdown_parts.append(f"[Error reading file: {e}]")
 
         return "\n".join(markdown_parts)

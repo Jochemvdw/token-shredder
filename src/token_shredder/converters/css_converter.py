@@ -71,7 +71,7 @@ class CSSConverter(BaseConverter):
                 markdown_parts.append("")
 
         except Exception as e:
-            logger.error(f"Error reading CSS: {e}")
+            logger.debug(f"Error reading CSS: {e}")
             markdown_parts.append(f"[Error reading CSS: {e}]")
 
         return "\n".join(markdown_parts)

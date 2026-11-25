@@ -62,7 +62,7 @@ class INIConverter(BaseConverter):
                 markdown_parts.append(f"- **[{section}]**: {len(items)} settings")
 
         except Exception as e:
-            logger.error(f"Error reading INI: {e}")
+            logger.debug(f"Error reading INI: {e}")
             markdown_parts.append(f"[Error reading INI: {e}]")
 
         return "\n".join(markdown_parts)

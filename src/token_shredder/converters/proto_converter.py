@@ -75,7 +75,7 @@ class ProtoConverter(BaseConverter):
                 markdown_parts.append("")
 
         except Exception as e:
-            logger.error(f"Error reading proto: {e}")
+            logger.debug(f"Error reading proto: {e}")
             markdown_parts.append(f"[Error reading proto: {e}]")
 
         return "\n".join(markdown_parts)

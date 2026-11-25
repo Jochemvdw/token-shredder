@@ -374,7 +374,7 @@ class YAMLConverter(BaseConverter):
         try:
             raw = Path(file_path).read_text(encoding='utf-8', errors='replace')
         except Exception as e:
-            logger.error(f"Error reading YAML: {e}")
+            logger.debug(f"Error reading YAML: {e}")
             return f"[Error reading YAML: {e}]"
         full = f"```yaml\n{raw.rstrip()}\n```\n"
         try:

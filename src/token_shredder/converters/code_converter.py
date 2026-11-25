@@ -40,11 +40,18 @@ class CodeConverter(BaseConverter):
 
             if ext == '.py':
                 markdown_parts = self._convert_python(source, options)
+                if not any(p.startswith("## ") and not p.startswith("## Imports") for p in markdown_parts):
+                    # A script without functions or classes: say so instead of
+                    # returning (almost) nothing.
+                    lines = len(source.splitlines())
+                    markdown_parts.append(
+                        f"Script without functions or classes ({lines} lines). "
+                        "Use --detail-level 5 for the full source.")
             else:
                 markdown_parts = self._convert_generic(source, file_path, options)
 
         except Exception as e:
-            logger.error(f"Error reading code: {e}")
+            logger.debug(f"Error reading code: {e}")
             markdown_parts.append(f"[Error reading code: {e}]")
 
         return "\n".join(markdown_parts)

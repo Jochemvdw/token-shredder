@@ -85,7 +85,7 @@ class DockerfileConverter(BaseConverter):
                     markdown_parts.append("")
 
         except Exception as e:
-            logger.error(f"Error reading Dockerfile: {e}")
+            logger.debug(f"Error reading Dockerfile: {e}")
             markdown_parts.append(f"[Error reading Dockerfile: {e}]")
 
         return "\n".join(markdown_parts)

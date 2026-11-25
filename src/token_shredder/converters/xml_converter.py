@@ -334,7 +334,7 @@ class XMLConverter(BaseConverter):
         try:
             raw = Path(file_path).read_text(encoding='utf-8', errors='replace')
         except Exception as e:
-            logger.error(f"Error reading XML: {e}")
+            logger.debug(f"Error reading XML: {e}")
             return f"[Error reading XML: {e}]"
         full = f"```xml\n{raw.rstrip()}\n```\n"
         try:

@@ -58,7 +58,7 @@ class JSONConverter(BaseConverter):
             return clamp_levels(render, level, minified)
 
         except Exception as e:
-            logger.error(f"Error reading JSON: {e}")
+            logger.debug(f"Error reading JSON: {e}")
             return f"[Error: {e}]"
 
     MAX_KEYS = 40

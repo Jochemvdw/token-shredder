@@ -59,7 +59,7 @@ class XLSXConverter(BaseConverter):
                 markdown_parts.append("")
 
         except Exception as e:
-            logger.error(f"Error reading XLSX: {e}")
+            logger.debug(f"Error reading XLSX: {e}")
             markdown_parts.append(f"[Error reading XLSX: {e}]")
 
         return "\n".join(markdown_parts)

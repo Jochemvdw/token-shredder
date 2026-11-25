@@ -87,7 +87,7 @@ class GraphQLConverter(BaseConverter):
                 markdown_parts.append("")
 
         except Exception as e:
-            logger.error(f"Error reading GraphQL: {e}")
+            logger.debug(f"Error reading GraphQL: {e}")
             markdown_parts.append(f"[Error reading GraphQL: {e}]")
 
         return "\n".join(markdown_parts)

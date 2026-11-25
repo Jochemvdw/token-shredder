@@ -619,7 +619,7 @@ def prose_from_text(text: str, level: int) -> str:
 
 _ENTITY = re.compile(r"&(?:[a-zA-Z]{2,8}|#\d{1,6}|#x[0-9a-fA-F]{1,5});")
 _CODE_SPAN = re.compile(r"(`+)(?:(?!\1).)+?\1")
-_FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+_FENCE = re.compile(r"^\s*(`{3,}|~{3,})")  # any indent: fences nested in list items
 _HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
 _BADGE_LINK = re.compile(r"\[\s*!\[[^\]]*\]\([^)]*\)\s*\]\([^)]*\)")
 _BADGE_REF = re.compile(r"\[\s*!\[[^\]]*\]\[[^\]]*\]\s*\](?:\[[^\]]*\]|\([^)]*\))")

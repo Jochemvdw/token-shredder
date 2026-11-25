@@ -35,7 +35,7 @@ class MarkdownConverter(BaseConverter):
                 return content
             return markdown_level(content, options.detail_level)
         except Exception as e:
-            logger.error(f"Error reading MD: {e}")
+            logger.debug(f"Error reading MD: {e}")
             return f"[Error reading MD: {e}]"
 
     def get_file_info(self, file_path: str) -> dict:

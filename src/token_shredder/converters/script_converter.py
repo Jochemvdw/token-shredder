@@ -72,7 +72,7 @@ class ScriptConverter(BaseConverter):
                 markdown_parts.append("")
 
         except Exception as e:
-            logger.error(f"Error reading script: {e}")
+            logger.debug(f"Error reading script: {e}")
             markdown_parts.append(f"[Error reading script: {e}]")
 
         return "\n".join(markdown_parts)

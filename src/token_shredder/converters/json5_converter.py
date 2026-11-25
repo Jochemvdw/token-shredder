@@ -39,7 +39,7 @@ class JSON5Converter(BaseConverter):
             markdown_parts.append(self._data_to_markdown(data))
 
         except Exception as e:
-            logger.error(f"Error reading JSON5: {e}")
+            logger.debug(f"Error reading JSON5: {e}")
             markdown_parts.append(f"[Error reading JSON5: {e}]")
 
         return "\n".join(markdown_parts)

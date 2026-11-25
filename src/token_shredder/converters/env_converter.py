@@ -49,7 +49,7 @@ class ENVConverter(BaseConverter):
                 markdown_parts.append("")
 
         except Exception as e:
-            logger.error(f"Error reading ENV: {e}")
+            logger.debug(f"Error reading ENV: {e}")
             markdown_parts.append(f"[Error reading ENV: {e}]")
 
         return "\n".join(markdown_parts)

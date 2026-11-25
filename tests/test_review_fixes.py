@@ -125,3 +125,56 @@ def test_api_convert_and_limits(tmp_path):
     assert client.post("/convert", files={"file": ("x.json", b"{bad")}).status_code == 422
     assert client.post("/convert", files={"file": ("x.json", b"{}")},
                        params={"detail_level": 99}).status_code == 422
+
+
+# --- second review (v0.4.0) ---
+
+def test_batch_budget_too_small_prints_reason(tmp_path):
+    for i in range(3):
+        (tmp_path / f"f{i}.txt").write_text("some text " * 50)
+    res = runner.invoke(app, ["batch", str(tmp_path), "-t", "100", "-o", "-", "--no-cache"])
+    assert res.exit_code == 1 and "too small" in res.output
+
+
+def test_write_errors_are_one_line(tmp_path):
+    src = tmp_path / "a.txt"
+    src.write_text("hello")
+    (tmp_path / "adir").mkdir()
+    res = runner.invoke(app, ["convert", str(src), "-o", str(tmp_path / "adir"), "--no-cache"])
+    assert res.exit_code == 1 and "Cannot write" in res.output and "Traceback" not in res.output
+
+
+def test_batch_skips_dependency_folders(tmp_path):
+    (tmp_path / "node_modules" / "x").mkdir(parents=True)
+    (tmp_path / "node_modules" / "x" / "n.js").write_text("function n() {}\n")
+    (tmp_path / "venv").mkdir()
+    (tmp_path / "venv" / "v.py").write_text("def v():\n    pass\n")
+    (tmp_path / "app.py").write_text("def app():\n    pass\n")
+    from token_shredder.main import find_batch_files
+    assert [f.name for f in find_batch_files(str(tmp_path))] == ["app.py"]
+
+
+def test_bom_and_windows_1252(tmp_path):
+    bom = tmp_path / "b.json"
+    bom.write_bytes(b'\xef\xbb\xbf{"a": 1}')
+    assert '"a"' in _conv(bom).markdown
+    win = tmp_path / "w.txt"
+    win.write_bytes("café “x” €".encode("cp1252"))
+    assert "café “x” €" in _conv(win).markdown
+
+
+def test_empty_file_is_an_error(tmp_path):
+    f = tmp_path / "e.csv"
+    f.write_text("")
+    with pytest.raises(ConversionError):
+        _conv(f)
+
+
+def test_markup_in_error_message_does_not_crash():
+    res = runner.invoke(app, ["convert", "we[/red]ird.txt"])
+    assert res.exit_code == 1 and "we[/red]ird.txt" in res.output
+
+
+def test_workers_must_be_positive(tmp_path):
+    res = runner.invoke(app, ["batch", str(tmp_path), "-w", "0"])
+    assert res.exit_code != 0 and "Traceback" not in res.output

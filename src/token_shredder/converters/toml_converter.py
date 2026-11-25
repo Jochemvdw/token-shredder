@@ -46,7 +46,7 @@ class TOMLConverter(BaseConverter):
             except UnicodeDecodeError:
                 data = tomllib.loads(text)
         except Exception as e:
-            logger.error(f"Error reading TOML: {e}")
+            logger.debug(f"Error reading TOML: {e}")
             return f"[Error reading TOML: {e}]"
 
         name = Path(file_path).name

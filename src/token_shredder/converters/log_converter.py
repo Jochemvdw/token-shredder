@@ -71,7 +71,7 @@ class LOGConverter(BaseConverter):
                 markdown_parts.append("")
 
         except Exception as e:
-            logger.error(f"Error reading LOG: {e}")
+            logger.debug(f"Error reading LOG: {e}")
             markdown_parts.append(f"[Error reading LOG: {e}]")
 
         return "\n".join(markdown_parts)

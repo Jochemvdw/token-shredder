@@ -36,7 +36,7 @@ class TextConverter(BaseConverter):
                 return text
             return prose_from_text(text, options.detail_level)
         except Exception as e:
-            logger.error(f"Error reading text: {e}")
+            logger.debug(f"Error reading text: {e}")
             return f"[Error: {e}]"
 
     def get_file_info(self, file_path: str) -> dict:

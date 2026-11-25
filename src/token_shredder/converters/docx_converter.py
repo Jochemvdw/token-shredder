@@ -46,7 +46,7 @@ class DOCXConverter(BaseConverter):
                 return render_blocks(blocks_all, 4, raw=True) + "\n"
             return levels_output(lambda lv: render_blocks(blocks_all, lv), level) + "\n"
         except Exception as e:
-            logger.error(f"Error reading DOCX: {e}")
+            logger.debug(f"Error reading DOCX: {e}")
             return f"[Error reading DOCX: {e}]"
 
     def _blocks(self, doc) -> list:

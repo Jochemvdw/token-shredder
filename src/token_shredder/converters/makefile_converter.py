@@ -58,7 +58,7 @@ class MakefileConverter(BaseConverter):
                 markdown_parts.append("")
 
         except Exception as e:
-            logger.error(f"Error reading Makefile: {e}")
+            logger.debug(f"Error reading Makefile: {e}")
             markdown_parts.append(f"[Error reading Makefile: {e}]")
 
         return "\n".join(markdown_parts)

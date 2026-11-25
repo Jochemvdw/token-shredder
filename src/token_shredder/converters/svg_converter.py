@@ -75,7 +75,7 @@ class SVGConverter(BaseConverter):
                 markdown_parts.append("")
 
         except Exception as e:
-            logger.error(f"Error reading SVG: {e}")
+            logger.debug(f"Error reading SVG: {e}")
             markdown_parts.append(f"[Error reading SVG: {e}]")
 
         return "\n".join(markdown_parts)

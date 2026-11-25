@@ -106,6 +106,8 @@ PDF, DOCX, PPTX, XLSX, HTML, Markdown, TXT, CSV, JSON, JSON5, YAML, TOML, INI, X
 - PDF headings come from bookmarks or numbering patterns; documents without either get a weaker outline at `-d 1`.
 - YAML, TOML, INI, SQL, XML and similar files are summarised at levels 1–4 (structure, short values); use `-d 5` for the full file.
 - Converting a `.md` file writes `name.shredded.md`; the input is never overwritten.
+- `batch` skips hidden folders and dependency/build folders (`node_modules`, `venv`, `dist`, `build`, `target`, `vendor`, ...).
+- Text that isn't UTF-8 is read as Windows-1252 (UTF-16 and BOMs are detected).
 - `convert` caches results for an hour in `~/.token-shredder/cache`; use `--no-cache` to skip it.
 
 ## HTTP API (optional)
