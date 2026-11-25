@@ -12,7 +12,7 @@ First release on PyPI.
 - Robustness: UTF-8 BOM, UTF-16 and Windows-1252 text; `batch` skips node_modules/venv/build folders; clean one-line errors (write failures, bad URLs, binary stdin, empty files); total download timeout; URL charsets.
 - PDF headings from typography (font size, bold) when a PDF has no bookmarks; JSON full-data output keeps numbers exactly as written; XML/YAML that doesn't parse is flagged with a note.
 - Secrets: well-known credential formats are redacted in all output (`--keep-secrets` to disable); `.env` values never shown; `batch` skips secret-looking files.
-- Data files: per-record index (issue titles, package versions), category counts and means; Python enum/dataclass fields in outlines; faster Excel (streaming).
+- Data files: per-record index (issue titles with comment counts, dates and authors; package versions), category counts and means; Python enum/dataclass fields in outlines; faster Excel (streaming).
 - `batch`: dependency folders skipped, partial results still output when some files fail, very large folders trimmed to the budget with a note.
 - `benchmarks/robustness.py` checks the invariants over any folder of files.
 - Fixes from two pre-release reviews (no more overwriting `.md` inputs, no fused tables/lists, exit codes).

@@ -118,3 +118,14 @@ def test_csv_profile_counts_and_mean(tmp_path):
     f.write_text("id,flag,val\n" + rows + "\n")
     md = _md(f)
     assert "yes ×200" in md and "no ×100" in md and "mean" in md
+
+
+def test_index_has_counts_dates_and_author(tmp_path):
+    import json
+    f = tmp_path / "issues.json"
+    f.write_text(json.dumps([{"number": i, "title": f"Issue {i}", "state": "open", "comments": i % 4,
+                              "created_at": f"2026-11-{i + 1:02d}T10:00:00Z",
+                              "user": {"login": f"dev{i % 3}"}, "body": "x " * 50} for i in range(12)]))
+    md = _md(f)
+    assert "5: Issue 5 [1 comment, 2026-11-06, by dev2]" in md
+    assert "open, " not in md.split("index", 1)[1]  # constant state isn't repeated per line

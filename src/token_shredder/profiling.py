@@ -542,6 +542,64 @@ def _depth(key) -> int:
     return k.count("/")
 
 
+# Short per-record facts people ask about: state, counts, dates, author.
+_EXTRA_CANDIDATES = (
+    ("state", ("state",)), ("status", ("status",)),
+    ("comments", ("comments",)), ("comments", ("comment_count",)), ("score", ("score",)),
+    ("stars", ("stargazers_count",)), ("stars", ("stars",)), ("count", ("count",)),
+    ("created", ("created_at",)), ("created", ("created",)), ("date", ("date",)),
+    ("by", ("user", "login")), ("by", ("author", "login")), ("by", ("author",)),
+    ("updated", ("updated_at",)),
+)
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
+
+
+def _get_path(record: dict, path: tuple):
+    value = record
+    for part in path:
+        if not isinstance(value, dict):
+            return None
+        value = value.get(part)
+    return value
+
+
+def _extra_fields(records: list) -> list:
+    """Up to 4 (label, path) pairs that most records have as short scalars."""
+    chosen, labels = [], set()
+    sample = records[:200]
+    for label, path in _EXTRA_CANDIDATES:
+        if label in labels:
+            continue
+        vals = [_get_path(r, path) for r in sample]
+        ok = [v for v in vals if isinstance(v, (int, float, str)) and not isinstance(v, bool)
+              and len(str(v)) <= 40]
+        # A value that is the same everywhere is already in the profile ("= open").
+        if len(ok) >= 0.8 * len(sample) and len(set(map(str, ok))) > 1:
+            chosen.append((label, path))
+            labels.add(label)
+        if len(chosen) == 4:
+            break
+    return chosen
+
+
+def _extra_value(record: dict, path: tuple) -> str:
+    v = _get_path(record, path)
+    if v is None or isinstance(v, (dict, list)):
+        return ""
+    text = str(v)
+    if _DATE_RE.match(text):
+        text = text[:10]
+    if path[-1] in ("comments", "comment_count"):
+        return f"{text} comment" + ("" if text == "1" else "s")
+    if path[-1] in ("stargazers_count", "stars"):
+        return f"{text} stars"
+    if path[-1] == "updated_at":
+        return f"updated {text}"
+    if path == ("user", "login") or path[0] == "author":
+        return f"by {text}"
+    return text
+
+
 def record_index(items: list, key_label: bool = False) -> list:
     """One short line per record: '<id or key>: <title>' (lists and maps of records).
 
@@ -567,15 +625,19 @@ def record_index(items: list, key_label: bool = False) -> list:
         # Version indexes (lockfiles): every top-level entry, nested ones up to the cap.
         top = [kv for kv in items if _depth(kv[0]) <= 1]
         limit = max(limit, len(top))
-    out = [f"index ({field} per {'key' if key_label else 'item'}):"]
+    extras = _extra_fields(records) if field != "version" else []
+    head = f"index ({field} per {'key' if key_label else 'item'}"
+    head += f"; also {', '.join(name for name, _ in extras)}):" if extras else "):"
+    out = [head]
     for i, (k, r) in enumerate(items[:limit]):
         if not isinstance(r, dict) or not isinstance(r.get(field), str):
             continue
         # Drop only a leading "node_modules/": nested paths stay distinguishable.
         label = (k[len("node_modules/"):] if isinstance(k, str) and k.startswith("node_modules/")
                  else k) if key_label else (r.get(id_field) if id_field else i)
-        title = r[field] if len(r[field]) <= 90 else r[field][:87] + "..."
-        out.append(f"  {label}: {title}")
+        title = r[field] if len(r[field]) <= 120 else r[field][:117] + "..."
+        meta = [m for m in (_extra_value(r, path) for _, path in extras) if m]
+        out.append(f"  {label}: {title}" + (f" [{', '.join(meta)}]" if meta else ""))
     if len(items) > limit:
         out.append(f"  ... {len(items) - limit:,} more (use --detail-level 4 for all data)")
     return out

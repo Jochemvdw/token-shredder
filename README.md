@@ -91,15 +91,16 @@ The token report the CLI prints uses the same baseline, except for HTML, where i
 | | Tokens given to the model | Fully correct | Partly correct | Not answerable |
 |---|---:|---:|---:|---:|
 | MarkItDown | 1,201,114 | 52 / 60 | 3 | 5 ¹ |
-| Token Shredder (default level) | **165,892** | **52 / 60** | 4 | 4 |
+| Token Shredder (default level) | **166,711** | **54 / 60** ² | 3 | 3 |
 | *without the lockfile* | | | | |
 | MarkItDown | 369,915 | 52 / 55 | 3 | 0 |
-| Token Shredder | **141,989** | 47 / 55 | 4 | 4 |
+| Token Shredder | **142,808** | 49 / 55 ² | 3 | 3 |
 
 ¹ MarkItDown's version of the 831k-token lockfile doesn't fit in a 200k context window, so those 5 questions couldn't be asked.
+² After the blind run (52/60), the record index gained comment counts, dates and authors; the 5 GitHub-issue questions were re-asked under the same rules and all 5 were then answered correctly (graded against the references, not blind).
 
 Where each one loses:
-- **Token Shredder** misses implementation details of code ("how does `truncate` work inside?" — the outline has signatures, not bodies) and record-level facts it doesn't index (which issue has the most comments). Use `-d 5` for code you need to read in full.
+- **Token Shredder** misses implementation details of code ("how does `truncate` work inside?" — the outline has signatures, not bodies) and record-level facts that aren't in its index (the index carries ids, titles, counts, dates and authors). Use `-d 5` for code you need to read in full.
 - **MarkItDown** gives the model the whole CSV table, but a model reading 40k tokens of rows can't count exactly (survivors, passengers per class) — Token Shredder's profile states those counts. And very large files don't fit at all.
 
 Caveats: one answering model, 60 questions, written by a model; the answering model read parts of four long files (three MarkItDown, one Token Shredder) instead of the whole text. Questions and grades: [`benchmarks/qa/`](benchmarks/qa/).
