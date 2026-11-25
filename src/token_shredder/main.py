@@ -1,6 +1,7 @@
 """
 token_shredder - Main Entry Point
 """
+import dataclasses
 import logging
 import re
 import sys
@@ -90,10 +91,147 @@ def full_text_markdown(file_path: str, file_format: str) -> str:
     return f"```{file_format}\n{text.rstrip()}\n```\n"
 
 
+def _truncate_to_tokens(text: str, max_tokens: int) -> str:
+    """Cut text to at most max_tokens (cl100k), at a line break, with a visible note."""
+    note = f"\n\n[... truncated to fit {max_tokens:,} tokens]\n"
+    enc = _token_counter.encoding
+    budget = max(max_tokens - _token_counter.estimate(note), 0)
+    if enc is None:
+        cut = text[: budget * 4]
+    else:
+        cut = enc.decode(enc.encode(text, disallowed_special=())[:budget])
+    if "\n" in cut[len(cut) // 2:]:
+        cut = cut[: cut.rindex("\n")]
+    return cut.rstrip() + note
+
+
+class _Source:
+    """A file, prepared for conversion: format, converter, cache key parts."""
+
+    def __init__(self, file_path: str, display_name: Optional[str] = None,
+                 file_format: Optional[str] = None):
+        problem = FileHandler().check_file(file_path)
+        if problem:
+            raise ConversionError(problem)
+        self.path = file_path
+        self.name = display_name or file_path
+        self.format = file_format or detect_file_format(file_path)
+        logger.info(f"Detected format: {self.format}")
+        self.converter = get_converter(self.format)
+        if not self.converter:
+            raise ConversionError(
+                f"Unsupported file type '{Path(file_path).suffix or '(no extension)'}': {self.name}. "
+                "See docs/FILE_FORMATS.md for the supported types."
+            )
+        size = Path(file_path).stat().st_size
+        if size > 1_000_000:
+            logger.info(f"Large file ({size:,} bytes); this may take a few seconds")
+        self._baseline_tokens: Optional[int] = None
+        self._results: dict = {}
+
+    def baseline_tokens(self, raw_markdown: str) -> int:
+        # Compare with what you would otherwise paste: the raw file for text
+        # formats, the converter's full extracted text for PDF/DOCX/PPTX/XLSX.
+        if self._baseline_tokens is None:
+            base = raw_markdown if self.format in BINARY_FORMATS else _read_text(self.path)
+            self._baseline_tokens = _token_counter.estimate(base)
+        return self._baseline_tokens
+
+
+def _convert_at_level(src: _Source, level: int, opts: dict, cache_enabled: bool) -> ConversionResult:
+    """Convert src at one detail level (memoised per source). No writing, no report."""
+    if level in src._results:
+        return src._results[level]
+    options = ConversionOptions(
+        detail_level=level,
+        preserve_images=opts["preserve_images"],
+        embed_images=opts["embed_images"],
+        include_comments=opts["include_comments"],
+    )
+    key = "|".join(str(opts[k]) for k in sorted(opts)) + f"|{level}|{src.format}|{_version()}"
+    options_hash = hashlib.md5(key.encode()).hexdigest()
+    cache_manager = Config().get_cache_manager() if cache_enabled else None
+    cached = cache_manager.get(src.path, options_hash) if cache_manager else None
+
+    if cached is not None:
+        logger.info(f"Using cache for {src.name}")
+        result = ConversionResult(markdown=cached, source_file=src.name, target_file="",
+                                  format=src.format, detail_level=level)
+        raw_markdown = cached
+    else:
+        if level >= 5 and src.format not in BINARY_FORMATS:
+            # Level 5 = full content: the file itself, untouched.
+            result = ConversionResult(markdown=full_text_markdown(src.path, src.format),
+                                      source_file=src.name, target_file="",
+                                      format=src.format, detail_level=level)
+        else:
+            try:
+                result = src.converter.convert(src.path, options)
+            except Exception as e:  # converter bug or unreadable file
+                raise ConversionError(f"Could not convert {src.name}: {e}") from e
+            # Converters report read/parse failures as "[Error ...]" text.
+            if result.markdown.lstrip().startswith("[Error"):
+                raise ConversionError(f"Could not convert {src.name}: {result.markdown.strip()}")
+        raw_markdown = result.markdown
+        if level < 5:
+            if opts["deduplicate"]:
+                result.markdown = _dedup.process(result.markdown)
+            if opts["minify_code"] and src.format in CODE_FORMATS:
+                result.markdown = _minify_code_blocks(result.markdown, src.format)
+            if opts["optimize_structure"]:
+                result.markdown = _optimizer.process(result.markdown)
+        if cache_manager:
+            cache_manager.set(src.path, options_hash, result.markdown)
+
+    result.source_file = src.name
+    result.target_file = ""
+    result.detail_level = level
+    result.source_tokens = src.baseline_tokens(raw_markdown)
+    result.output_tokens = _token_counter.estimate(result.markdown)
+    _set_savings(result)
+    src._results[level] = result
+    return result
+
+
+def _set_savings(result: ConversionResult) -> None:
+    result.tokens_saved = result.source_tokens - result.output_tokens
+    result.tokens_saved_pct = (result.tokens_saved / result.source_tokens * 100
+                               if result.source_tokens > 0 else 0.0)
+
+
+def _fit_budget(src: _Source, max_level: int, max_tokens: int, opts: dict,
+                cache_enabled: bool) -> ConversionResult:
+    """The most useful output within max_tokens, at most max_level.
+
+    Normally the highest level that fits. But if that level uses less than a quarter
+    of the budget (e.g. a web page: headings only, while the next level is the
+    article), the next level up is truncated to the budget instead. If even level 1
+    is too big, level 1 is truncated.
+    """
+    fitting = None
+    for level in range(max_level, 0, -1):
+        result = _convert_at_level(src, level, opts, cache_enabled)
+        if result.output_tokens <= max_tokens:
+            fitting = result
+            break
+    if fitting is not None and (fitting.output_tokens * 4 >= max_tokens
+                                or fitting.detail_level >= max_level):
+        return fitting
+    base_level = fitting.detail_level + 1 if fitting is not None else 1
+    result = _convert_at_level(src, base_level, opts, cache_enabled)
+    truncated = dataclasses.replace(result)
+    truncated.markdown = _truncate_to_tokens(result.markdown, max_tokens)
+    truncated.output_tokens = _token_counter.estimate(truncated.markdown)
+    truncated.warnings = list(result.warnings) + [
+        f"level {base_level} truncated to fit {max_tokens:,} tokens"]
+    _set_savings(truncated)
+    return truncated
+
+
 def convert_file(
     file_path: str,
     output_path: Optional[str] = None,
-    detail_level: int = 3,
+    detail_level: Optional[int] = None,
     preserve_images: bool = False,
     embed_images: bool = False,
     include_comments: bool = False,
@@ -104,127 +242,39 @@ def convert_file(
     cache_enabled: bool = True,
     confirm_large: bool = True,
     write_output: bool = True,
+    max_tokens: Optional[int] = None,
+    display_name: Optional[str] = None,
+    file_format: Optional[str] = None,
 ) -> ConversionResult:
     """Convert a file to markdown.
 
     detail_level runs from 1 (smallest: names and structure only) to 5 (full
-    content, no compression); 3 is the default. See DETAIL_LEVELS.
+    content, no compression); default 3. With max_tokens, the highest level that
+    fits is chosen (up to detail_level, default 5); if even level 1 is too big it
+    is truncated. See DETAIL_LEVELS.
     """
-    if not 1 <= detail_level <= 5:
+    if detail_level is not None and not 1 <= detail_level <= 5:
         raise ValueError(f"detail_level must be 1-5, got {detail_level}")
+    if max_tokens is not None and max_tokens < 50:
+        raise ValueError("max_tokens must be at least 50")
     start_time = time.time()
-    file_handler = FileHandler()
-    config = Config()
-    options = ConversionOptions(
-        detail_level=detail_level,
-        preserve_images=preserve_images,
-        embed_images=embed_images,
-        include_comments=include_comments,
-    )
-    processing_options = ProcessingOptions(
-        deduplicate=deduplicate,
-        minify_code=minify_code,
-        optimize_structure=optimize_structure,
-        cache_enabled=cache_enabled,
-    )
+    src = _Source(file_path, display_name, file_format)
+    output_file = resolve_output_path(file_path, output_path) if write_output else None
+    opts = dict(preserve_images=preserve_images, embed_images=embed_images,
+                include_comments=include_comments, deduplicate=deduplicate,
+                minify_code=minify_code, optimize_structure=optimize_structure)
 
-    problem = file_handler.check_file(file_path)
-    if problem:
-        raise ConversionError(problem)
-    output_file = resolve_output_path(file_path, output_path)
-
-    file_format = detect_file_format(file_path)
-    logger.info(f"Detected format: {file_format}")
-
-    converter = get_converter(file_format)
-    if not converter:
-        raise ConversionError(
-            f"Unsupported file type '{Path(file_path).suffix or '(no extension)'}': {file_path}. "
-            "See docs/FILE_FORMATS.md for the supported types."
-        )
-
-    file_size = Path(file_path).stat().st_size
-    if confirm_large and file_size > 1_000_000:
-        logger.info(f"Large file ({file_size:,} bytes); this may take a few seconds")
-
-    cache_manager = None
-    options_hash = hashlib.md5(
-        f"{detail_level}{preserve_images}{embed_images}{include_comments}"
-        f"{deduplicate}{minify_code}{optimize_structure}{file_format}{_version()}".encode()
-    ).hexdigest()
-    if processing_options.cache_enabled:
-        cache_manager = config.get_cache_manager()
-        cached = cache_manager.get(file_path, options_hash)
-        if cached:
-            logger.info(f"Using cache for {file_path}")
-            result = ConversionResult(
-                markdown=cached,
-                source_file=file_path,
-                target_file=str(output_file),
-                format=file_format,
-            )
-            result.output_tokens = _token_counter.estimate(cached)
-            if file_format not in BINARY_FORMATS:
-                result.source_tokens = _token_counter.estimate(_read_text(file_path))
-                result.tokens_saved = result.source_tokens - result.output_tokens
-                if result.source_tokens:
-                    result.tokens_saved_pct = result.tokens_saved / result.source_tokens * 100
-            result.processing_time_ms = (time.time() - start_time) * 1000
-            if write_output:
-                _write(output_file, cached)
-            if show_metrics:
-                display_report(result)
-            return result
-
-    if detail_level >= 5 and file_format not in BINARY_FORMATS:
-        # Level 5 = full content: the file itself, untouched.
-        result = ConversionResult(
-            markdown=full_text_markdown(file_path, file_format),
-            source_file=file_path,
-            target_file=str(Path(file_path).with_suffix('.md')),
-            format=file_format,
-            detail_level=detail_level,
-        )
+    if max_tokens is not None:
+        result = _fit_budget(src, detail_level or 5, max_tokens, opts, cache_enabled)
     else:
-        try:
-            result = converter.convert(file_path, options)
-        except Exception as e:  # converter bug or unreadable file
-            raise ConversionError(f"Could not convert {file_path}: {e}") from e
-        # Converters report read/parse failures as "[Error ...]" text.
-        if result.markdown.lstrip().startswith("[Error"):
-            raise ConversionError(f"Could not convert {file_path}: {result.markdown.strip()}")
-    raw_markdown = result.markdown
+        result = _convert_at_level(src, detail_level or 3, opts, cache_enabled)
 
-    if detail_level < 5:
-        if deduplicate:
-            result.markdown = _dedup.process(result.markdown)
-
-        if minify_code and file_format in CODE_FORMATS:
-            result.markdown = _minify_code_blocks(result.markdown, file_format)
-
-        if optimize_structure:
-            result.markdown = _optimizer.process(result.markdown)
-
-    # Compare with what you would otherwise paste: the raw file for text
-    # formats, the converter's full extracted text for PDF/DOCX/PPTX/XLSX.
-    baseline = raw_markdown if file_format in BINARY_FORMATS else _read_text(file_path)
-    result.source_tokens = _token_counter.estimate(baseline)
-    result.output_tokens = _token_counter.estimate(result.markdown)
-    result.tokens_saved = result.source_tokens - result.output_tokens
-    result.tokens_saved_pct = (result.tokens_saved / result.source_tokens * 100) if result.source_tokens > 0 else 0.0
     result.processing_time_ms = (time.time() - start_time) * 1000
-    result.quality_score = _quality_scorer.score(result.markdown, baseline)
-
-    if processing_options.cache_enabled and cache_manager:
-        cache_manager.set(file_path, options_hash, result.markdown)
-
-    if write_output:
+    if output_file is not None:
         _write(output_file, result.markdown)
-    result.target_file = str(output_file)
-
+        result.target_file = str(output_file)
     if show_metrics:
         display_report(result)
-
     return result
 
 
@@ -244,31 +294,31 @@ def _minify_code_blocks(markdown: str, file_format: str) -> str:
     )
 
 
-def display_report(result: ConversionResult):
-    """Display conversion report."""
+def display_report(result: ConversionResult, out: Optional[Console] = None):
+    """Display conversion report (on stdout, or on `out`, e.g. stderr when piping)."""
     table = Table(title="TOKEN SHREDDER REPORT", show_lines=True)
     table.add_column("Metric", style="cyan")
     table.add_column("Value", style="green")
 
-    table.add_row("Input File", result.source_file)
-    table.add_row("Output File", result.target_file)
+    table.add_row("Input", result.source_file)
+    table.add_row("Output", result.target_file or "-")
     table.add_row("Format", result.format)
+    table.add_row("Detail level", str(result.detail_level))
     table.add_row("", "")
     table.add_row("Source Tokens", f"{result.source_tokens:,}")
     table.add_row("Output Tokens", f"{result.output_tokens:,}")
     table.add_row("Tokens Saved", f"{result.tokens_saved:,} ({result.tokens_saved_pct:.1f}%)")
     table.add_row("", "")
     table.add_row("Processing Time", f"{result.processing_time_ms:.1f}ms")
-    table.add_row("Images", str(result.images_count))
-    table.add_row("Tables", str(result.tables_count))
-    table.add_row("Pages", str(result.pages))
+    for w in result.warnings:
+        table.add_row("Note", w)
 
-    console.print(Panel(table, border_style="blue"))
+    (out or console).print(Panel(table, border_style="blue"))
 
 
 SUPPORTED_SUFFIXES = {
     '.pdf', '.docx', '.pptx', '.xlsx', '.xls', '.py', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',
-    '.java', '.go', '.rs', '.json', '.json5', '.csv', '.html', '.htm', '.md', '.txt', '.css',
+    '.java', '.go', '.rs', '.json', '.json5', '.jsonl', '.ndjson', '.csv', '.tsv', '.html', '.htm', '.md', '.txt', '.css',
     '.yaml', '.yml', '.xml', '.sql', '.toml', '.env', '.log', '.ini', '.cfg', '.conf', '.svg',
     '.graphql', '.gql', '.proto', '.sh', '.bash', '.zsh', '.fish', '.ps1', '.bat', '.cmd',
     '.dockerfile', '.mk', '.c', '.cpp', '.cc', '.cxx', '.h', '.hpp', '.hh', '.hxx',
@@ -291,22 +341,80 @@ def find_batch_files(directory: str) -> List[Path]:
     return files
 
 
+def _waterfill(needs: List[int], budget: int) -> List[int]:
+    """Max-min fair split: small needs are met in full, big ones share the rest equally."""
+    alloc = [0] * len(needs)
+    remaining = budget
+    order = sorted(range(len(needs)), key=lambda i: needs[i])
+    for k, i in enumerate(order):
+        share = remaining // (len(needs) - k)
+        alloc[i] = min(needs[i], share)
+        remaining -= alloc[i]
+    return alloc
+
+
+def _allocate_budget(sources: list, max_tokens: int, max_level: int, opts: dict,
+                     cache_enabled: bool, header_tokens: int) -> List[ConversionResult]:
+    """Share max_tokens across files.
+
+    Each file "needs" its size at max_level. Small files get everything they need;
+    large files split the rest equally (water-filling) and each gets the highest
+    detail level that fits its share (truncated level 1 if nothing fits). Unused
+    budget is then offered once more to the files that are still below their need.
+    """
+    budget = max_tokens - header_tokens * len(sources)
+    if budget < 50 * len(sources):
+        raise ConversionError(
+            f"--max-tokens {max_tokens:,} is too small for {len(sources)} files")
+    need = [_convert_at_level(s, max_level, opts, cache_enabled).output_tokens for s in sources]
+    alloc = [max(a, 50) for a in _waterfill(need, budget)]
+    results = [_fit_budget(s, max_level, a, opts, cache_enabled) for s, a in zip(sources, alloc)]
+    leftover = budget - sum(r.output_tokens for r in results)
+    if leftover > 0:
+        extra_need = [max(n - r.output_tokens, 0) for n, r in zip(need, results)]
+        extra = _waterfill(extra_need, leftover)
+        results = [_fit_budget(s, max_level, r.output_tokens + e, opts, cache_enabled) if e else r
+                   for s, r, e in zip(sources, results, extra)]
+    return results
+
+
+def combine_results(results: List[ConversionResult], root: Path) -> str:
+    """One document with a <file> block per file (for --output - / --copy).
+
+    XML-style tags keep file boundaries unambiguous for the model, even when the
+    files themselves contain markdown headings.
+    """
+    parts = []
+    for r in results:
+        try:
+            name = Path(r.source_file).relative_to(root).as_posix()
+        except ValueError:
+            name = r.source_file
+        parts.append(f'<file path="{name}" detail_level="{r.detail_level}">\n'
+                     f'{r.markdown.strip()}\n</file>\n')
+    return "\n".join(parts)
+
+
 def batch_convert(
     directory: str,
     output_dir: Optional[str] = None,
-    detail_level: int = 3,
+    detail_level: Optional[int] = None,
     workers: int = 4,
     preserve_images: bool = False,
     quiet: bool = False,
+    max_tokens: Optional[int] = None,
+    write_output: bool = True,
+    cache_enabled: bool = True,
 ) -> List[ConversionResult]:
     """Convert every supported file under directory.
 
     Output keeps the original name plus ".md" ("report.pdf" -> "report.pdf.md"), so
     "a.py" and "a.txt" never overwrite each other. With output_dir the folder
     structure is mirrored there; otherwise files are written next to the originals.
+    With max_tokens the budget is shared across all files (see _allocate_budget).
     Raises ConversionError at the end if any file failed.
     """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from concurrent.futures import ThreadPoolExecutor
 
     root = Path(directory)
     files = find_batch_files(directory)
@@ -314,40 +422,56 @@ def batch_convert(
         err_console.print(f"[yellow]No supported files found in {directory}[/yellow]")
         return []
 
-    def target(f: Path) -> str:
+    def target(f: Path) -> Path:
         rel = f.relative_to(root)
         base = Path(output_dir) / rel if output_dir else f
-        return str(base.with_name(base.name + '.md'))
+        return base.with_name(base.name + '.md')
 
-    results, failures = [], []
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = {
-            executor.submit(convert_file, str(f), output_path=target(f), detail_level=detail_level,
-                            preserve_images=preserve_images, show_metrics=False): f
-            for f in files
-        }
-        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"),
-                      console=console, disable=quiet, transient=True) as progress:
-            task = progress.add_task("Converting files...", total=len(files))
-            for future in as_completed(futures):
-                f = futures[future]
-                try:
-                    r = future.result()
-                    results.append(r)
-                    if not quiet:
-                        console.print(f"{f.relative_to(root)} -> {r.target_file} "
-                                      f"({r.source_tokens:,} -> {r.output_tokens:,} tokens)",
-                                      markup=False, highlight=False)
-                except Exception as e:
-                    failures.append(f)
-                    err_console.print(f"[red]{e}[/red]")
-                progress.advance(task)
+    opts = dict(preserve_images=preserve_images, embed_images=False, include_comments=False,
+                deduplicate=True, minify_code=True, optimize_structure=True)
+    failures = []
+
+    def prepare(f: Path):
+        try:
+            src = _Source(str(f))
+            # Warm the memo at the starting level in parallel.
+            _convert_at_level(src, 1 if max_tokens else (detail_level or 3), opts, cache_enabled)
+            return src
+        except Exception as e:
+            failures.append(f)
+            err_console.print(f"[red]{e}[/red]")
+            return None
+
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"),
+                  console=err_console, disable=quiet, transient=True) as progress:
+        progress.add_task(f"Converting {len(files)} files...", total=None)
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            sources = [s for s in executor.map(prepare, files) if s is not None]
+        if max_tokens is not None and sources:
+            header = _token_counter.estimate('<file path="some/folder/file_name.ext" '
+                                             'detail_level="3">\n\n</file>\n')
+            results = _allocate_budget(sources, max_tokens, detail_level or 5, opts,
+                                       cache_enabled, header)
+        else:
+            results = [_convert_at_level(s, detail_level or 3, opts, cache_enabled)
+                       for s in sources]
+
+    for src, r in zip(sources, results):
+        r.source_file = src.path
+        if write_output:
+            out = target(Path(src.path))
+            _write(out, r.markdown)
+            r.target_file = str(out)
+        if not quiet:
+            err_console.print(f"{Path(src.path).relative_to(root)} -> {r.target_file or '(combined)'} "
+                              f"(level {r.detail_level}{', truncated' if r.warnings else ''}, {r.source_tokens:,} -> "
+                              f"{r.output_tokens:,} tokens)", markup=False, highlight=False)
 
     if not quiet:
-        src = sum(r.source_tokens for r in results)
-        out = sum(r.output_tokens for r in results)
-        console.print(f"\n{len(results)} converted, {len(failures)} failed. "
-                      f"Tokens: {src:,} -> {out:,}")
+        src_total = sum(r.source_tokens for r in results)
+        out_total = sum(r.output_tokens for r in results)
+        err_console.print(f"\n{len(results)} converted, {len(failures)} failed. "
+                          f"Tokens: {src_total:,} -> {out_total:,}")
     if failures:
         raise ConversionError(f"{len(failures)} file(s) failed")
     return results
@@ -394,11 +518,54 @@ def _set_verbosity(quiet: bool, verbose: bool) -> None:
         set_log_level(logging.INFO)
 
 
+def _copy_to_clipboard(text: str) -> None:
+    import shutil
+    import subprocess
+    for cmd in (["pbcopy"], ["wl-copy"], ["xclip", "-selection", "clipboard"],
+                ["xsel", "--clipboard", "--input"], ["clip"]):
+        if shutil.which(cmd[0]):
+            subprocess.run(cmd, input=text.encode("utf-8"), check=True)
+            return
+    raise ConversionError("No clipboard tool found (pbcopy, wl-copy, xclip, xsel or clip)")
+
+
+def _emit(results: List[ConversionResult], combined: str, *, to_stdout: bool, copy: bool,
+          as_json: bool) -> None:
+    """Send converted text to stdout and/or the clipboard."""
+    if as_json:
+        import json
+        payload = [{"source": r.source_file, "format": r.format, "detail_level": r.detail_level,
+                    "source_tokens": r.source_tokens, "output_tokens": r.output_tokens,
+                    "notes": r.warnings, "output_file": r.target_file or None,
+                    "markdown": r.markdown} for r in results]
+        text = json.dumps(payload[0] if len(payload) == 1 else payload, ensure_ascii=False,
+                          indent=2) + "\n"
+    else:
+        text = combined
+    if copy:
+        _copy_to_clipboard(text)
+    if to_stdout:
+        sys.stdout.write(text if text.endswith("\n") else text + "\n")
+        sys.stdout.flush()
+
+
 @app.command()
 def convert(
-    file_path: str = typer.Argument(..., help="File to convert", exists=True),
-    output: Optional[str] = typer.Option(None, '--output', '-o', help='Output file path'),
-    detail_level: int = _detail_option(),
+    source: str = typer.Argument(..., help="File, http(s) URL, or - for stdin"),
+    output: Optional[str] = typer.Option(
+        None, '--output', '-o',
+        help="Output file, or - for stdout. Default: stdout when piped or for URL/stdin input, "
+             "else FILE.md next to the input"),
+    detail_level: Optional[int] = typer.Option(
+        None, '--detail-level', '-d', min=1, max=5,
+        help=DETAIL_HELP + " (with --max-tokens: the highest level to try)"),
+    max_tokens: Optional[int] = typer.Option(
+        None, '--max-tokens', '-t', min=50,
+        help="Token budget: use the highest detail level that fits, truncate if nothing fits"),
+    copy: bool = typer.Option(False, '--copy', '-c', help="Copy the result to the clipboard"),
+    as_json: bool = typer.Option(False, '--json', help="Output JSON (markdown + token counts)"),
+    input_type: Optional[str] = typer.Option(
+        None, '--type', help="Input format for stdin/URLs when it can't be detected, e.g. json"),
     preserve_images: bool = typer.Option(False, '--preserve-images', help='Preserve images'),
     embed_images: bool = typer.Option(False, '--embed-images', help='Embed images as base64'),
     include_comments: bool = typer.Option(False, '--include-comments', help='Include code comments'),
@@ -408,44 +575,101 @@ def convert(
     verbose: bool = typer.Option(False, '--verbose', '-v', help='Show progress messages'),
     no_cache: bool = typer.Option(False, '--no-cache', help='Disable caching'),
 ):
-    """Convert a file to markdown."""
+    """Convert a file, URL or stdin to compact markdown."""
+    from token_shredder.sources import SourceError, fetch_url, is_url, read_stdin
+
     _set_verbosity(quiet, verbose)
-    _run_cli(
-        convert_file,
-        file_path,
-        output_path=output,
-        detail_level=detail_level,
-        preserve_images=preserve_images,
-        embed_images=embed_images,
-        include_comments=include_comments,
-        deduplicate=not no_deduplicate,
-        minify_code=not no_minify,
-        show_metrics=not quiet,
-        cache_enabled=not no_cache,
-    )
+    materialized = None
+    try:
+        if source == "-":
+            materialized = read_stdin(sys.stdin.buffer, input_type)
+        elif is_url(source):
+            materialized = fetch_url(source, input_type)
+    except SourceError as e:
+        err_console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        piped = not sys.stdout.isatty()
+        to_stdout = output == "-" or (output is None and not copy and (piped or materialized))
+        write_file = output not in (None, "-") or (output is None and not to_stdout and not copy)
+        result = _run_cli(
+            convert_file,
+            materialized.path if materialized else source,
+            output_path=output if write_file else None,
+            detail_level=detail_level,
+            max_tokens=max_tokens,
+            preserve_images=preserve_images,
+            embed_images=embed_images,
+            include_comments=include_comments,
+            deduplicate=not no_deduplicate,
+            minify_code=not no_minify,
+            show_metrics=False,
+            cache_enabled=not no_cache and materialized is None,
+            write_output=write_file,
+            display_name=materialized.name if materialized else None,
+            file_format=materialized.format if materialized else None,
+        )
+        _run_cli(_emit, [result], result.markdown, to_stdout=to_stdout, copy=copy, as_json=as_json)
+        if not quiet:
+            # Keep stdout clean for the content when it carries the output.
+            display_report(result, out=err_console if to_stdout else None)
+            if copy:
+                err_console.print(f"Copied {result.output_tokens:,} tokens to the clipboard.")
+    finally:
+        if materialized:
+            materialized.cleanup()
 
 
 @app.command()
 def batch(
-    directory: str = typer.Argument(..., help="Directory to process", exists=True),
-    output: Optional[str] = typer.Option(None, '--output', '-o', help='Output directory'),
-    detail_level: int = _detail_option(),
+    directory: str = typer.Argument(..., help="Directory to process (recursive)"),
+    output: Optional[str] = typer.Option(
+        None, '--output', '-o',
+        help="Output directory, or - for one combined document on stdout"),
+    detail_level: Optional[int] = typer.Option(
+        None, '--detail-level', '-d', min=1, max=5,
+        help=DETAIL_HELP + " (with --max-tokens: the highest level to try)"),
+    max_tokens: Optional[int] = typer.Option(
+        None, '--max-tokens', '-t', min=50,
+        help="Total token budget shared by all files"),
+    copy: bool = typer.Option(False, '--copy', '-c',
+                              help="Copy one combined document to the clipboard"),
+    as_json: bool = typer.Option(False, '--json', help="Output JSON instead of markdown"),
     workers: int = typer.Option(4, '--workers', '-w', help='Parallel workers'),
     preserve_images: bool = typer.Option(False, '--preserve-images', help='Preserve images'),
     quiet: bool = typer.Option(False, '--quiet', '-q', help='Print nothing except errors'),
     verbose: bool = typer.Option(False, '--verbose', '-v', help='Show progress messages'),
+    no_cache: bool = typer.Option(False, '--no-cache', help='Disable caching'),
 ):
-    """Batch convert all supported files in a directory."""
+    """Convert all supported files in a folder, optionally within one token budget."""
     _set_verbosity(quiet, verbose)
-    _run_cli(
+    if not Path(directory).is_dir():
+        err_console.print(f"[red]Not a directory: {directory}[/red]")
+        raise typer.Exit(1)
+    to_stdout = output == "-"
+    combined_mode = to_stdout or copy or as_json
+    results = _run_cli(
         batch_convert,
         directory,
-        output_dir=output,
+        output_dir=None if combined_mode else output,
         detail_level=detail_level,
         workers=workers,
         preserve_images=preserve_images,
         quiet=quiet,
+        max_tokens=max_tokens,
+        write_output=not combined_mode,
+        cache_enabled=not no_cache,
     )
+    if combined_mode and results:
+        root = Path(directory).resolve()
+        for r in results:
+            r.source_file = str(Path(r.source_file).resolve())
+        combined = combine_results(results, root)
+        _run_cli(_emit, results, combined, to_stdout=to_stdout or (as_json and not copy),
+                 copy=copy, as_json=as_json)
+        if copy and not quiet:
+            err_console.print(f"Copied {_token_counter.estimate(combined):,} tokens to the clipboard.")
 
 
 @app.command()
@@ -500,6 +724,8 @@ def quality(
 ):
     """Show token counts and a quality score without writing a file."""
     result = _dry_run(file_path, detail_level)
+    full = _dry_run(file_path, 5)
+    result.quality_score = _quality_scorer.score(result.markdown, full.markdown)
     console.print(f"\n[bold]File Analysis: {Path(file_path).name}[/bold]")
     console.print(f"Format: {result.format}")
     console.print(f"Input tokens: {result.source_tokens:,}")

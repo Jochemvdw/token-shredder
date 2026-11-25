@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "token-shredder"
-version = "0.3.0"
+version = "0.4.0"
 description = "Convert files to compact markdown for LLM prompts: strips markup, outlines code and JSON."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -31,13 +31,9 @@ dependencies = [
     "openpyxl>=3.1.0",
     "beautifulsoup4>=4.12.0",
     "tiktoken>=0.5.0",
-    "fastapi>=0.110.0",
-    "python-multipart>=0.0.9",
-    "pydantic>=2.0",
     "typer>=0.9.0",
     "rich>=13.0.0",
     "pyyaml>=6.0",
-    "aiofiles>=23.0.0",
     "json5>=0.9.0",
     "tomli>=2.0; python_version < '3.11'",
 ]
@@ -47,6 +43,8 @@ dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
     "httpx>=0.24.0",
+    "fastapi>=0.110.0",
+    "python-multipart>=0.0.9",
     "black>=23.0.0",
     "flake8>=6.0.0",
     "mypy>=1.5.0",
@@ -55,8 +53,12 @@ dev = [
     "twine>=5.0.0",
 ]
 api = [
-    "anthropic>=0.40.0",
+    "fastapi>=0.110.0",
+    "python-multipart>=0.0.9",
     "uvicorn>=0.24.0",
+]
+claude = [
+    "anthropic>=0.40.0",
 ]
 
 [project.scripts]

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 from token_shredder.converters.base_converter import BaseConverter
 from token_shredder.models import ConversionResult, ConversionOptions
+from token_shredder.profiling import summarize_table
 from token_shredder.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -54,7 +55,7 @@ class XLSXConverter(BaseConverter):
                     continue
 
                 ws_f = wb_formulas[sheet_name] if wb_formulas is not None else None
-                markdown_parts.append(self._sheet_to_markdown(ws, ws_f))
+                markdown_parts.append(self._sheet_to_markdown(ws, ws_f, options.detail_level))
                 markdown_parts.append("")
 
         except Exception as e:
@@ -67,36 +68,30 @@ class XLSXConverter(BaseConverter):
     def _cell_text(value) -> str:
         if value is None:
             return ''
-        text = str(value).replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ')
-        return text.replace('|', '\\|')
+        return str(value)
 
-    def _sheet_to_markdown(self, ws, ws_formulas=None) -> str:
-        rows = []
+    def _sheet_to_markdown(self, ws, ws_formulas=None, level: int = 3) -> str:
         formula_rows = ws_formulas.iter_rows(values_only=True) if ws_formulas is not None else None
-        for row_idx, row in enumerate(ws.iter_rows(values_only=True), 1):
-            frow = next(formula_rows, None) if formula_rows is not None else None
-            if row_idx > 50:
-                rows.append(f"... ({ws.max_row - 50} more rows)")
-                break
-            values = list(row)
-            if frow is not None:
-                # No cached value (never calculated): fall back to formula text
-                for i, v in enumerate(values):
-                    if v is None and i < len(frow) and isinstance(frow[i], str) and frow[i].startswith('='):
-                        values[i] = frow[i]
-            cells = [self._cell_text(c) for c in values]
-            if all(c == '' for c in cells):
-                continue
-            rows.append(cells)
 
-        if not rows or not isinstance(rows[0], list):
+        def rows():
+            for row in ws.iter_rows(values_only=True):
+                frow = next(formula_rows, None) if formula_rows is not None else None
+                values = list(row)
+                if frow is not None:
+                    # No cached value (never calculated): fall back to formula text
+                    for i, v in enumerate(values):
+                        if v is None and i < len(frow) and isinstance(frow[i], str) and frow[i].startswith('='):
+                            values[i] = frow[i]
+                cells = [self._cell_text(c) for c in values]
+                if all(c == '' for c in cells):
+                    continue
+                yield cells
+
+        it = rows()
+        header = next(it, None)  # first non-empty row
+        if header is None:
             return "_(No data)_"
-
-        ncols = len(rows[0])
-        out = ["| " + " | ".join(rows[0]) + " |", "| " + " | ".join(["---"] * ncols) + " |"]
-        for r in rows[1:]:
-            out.append(r if isinstance(r, str) else "| " + " | ".join(r) + " |")
-        return '\n'.join(out)
+        return summarize_table(header, it, level)
 
     def get_file_info(self, file_path: str) -> dict:
         try:

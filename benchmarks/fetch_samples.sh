@@ -10,3 +10,4 @@ curl -sSL -o requests-sessions.py https://raw.githubusercontent.com/psf/requests
 curl -sSL -o express-router.js https://raw.githubusercontent.com/expressjs/express/4.x/lib/router/index.js
 curl -sSL -o gh-repo.json https://api.github.com/repos/python/cpython
 curl -sSL -o gh-issues.json "https://api.github.com/repos/psf/requests/issues?per_page=10"
+curl -sSL -o airports.csv https://raw.githubusercontent.com/datasets/airport-codes/main/data/airport-codes.csv

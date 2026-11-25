@@ -1,17 +1,24 @@
 # Token Shredder
 
-Convert files to compact markdown before you paste them into an LLM prompt.
+**Fit any file, folder or web page into your LLM's context budget.**
 
-Token Shredder turns PDF, DOCX, PPTX, HTML, code, JSON and ~25 other formats into markdown. For documents it gives you clean text. For HTML, code and JSON it goes further and **cuts content on purpose**: web pages lose navigation and link URLs, code becomes an outline (signatures + docstrings), JSON becomes a schema with example values. That is where the big token savings come from, and it is the trade-off to know about. One `--detail-level` from 1 (names only) to 5 (full file) controls how much is cut, the same way for every format.
+```bash
+token-shredder batch ./src --max-tokens 20000 --copy   # a whole folder, within 20k tokens, on your clipboard
+token-shredder convert https://example.com/article     # just the article, as markdown
+token-shredder convert export.csv                      # a 50 MB CSV as a one-page profile
+```
+
+Token Shredder turns PDF, DOCX, PPTX, XLSX, HTML, code, JSON/JSONL/CSV and ~25 other formats into compact markdown, offline. It **cuts content on purpose** where that helps a model: web pages lose navigation and boilerplate, code becomes an outline (signatures + docstrings), data files become a profile (columns, types, ranges, example values). One `--detail-level` from 1 (names only) to 5 (full file) sets how much is kept — or give it a token budget and it picks the level for you.
 
 Runs locally. No API key, no model downloads.
 
-> **Status:** alpha (v0.3.0). Feedback and issues welcome.
+> **Status:** alpha (v0.4.0). Feedback and issues welcome.
 
 ## Install
 
 ```bash
 pip install token-shredder        # or: pipx install token-shredder
+uvx token-shredder convert file.pdf   # run without installing
 ```
 
 Python 3.10+.
@@ -19,19 +26,32 @@ Python 3.10+.
 ## Use
 
 ```bash
-token-shredder convert paper.pdf              # writes paper.md and prints a token report
-token-shredder convert app.py -o app.md
-token-shredder convert data.json -d 4         # all JSON data, minified (default 3 = schema)
+# One file, URL or stdin
+token-shredder convert paper.pdf               # writes paper.md, prints a token report
+token-shredder convert paper.pdf -o -          # markdown to stdout (also the default when piped)
+token-shredder convert paper.pdf --copy        # straight to the clipboard
+token-shredder convert https://docs.python.org/3/whatsnew/3.13.html
+curl -s https://api.github.com/repos/python/cpython | token-shredder convert -
 token-shredder convert app.py -d 5             # full file, no compression
-token-shredder batch ./docs -o ./docs-md   # recursive; report.pdf -> docs-md/report.pdf.md
-token-shredder preview page.html              # show output + savings, write nothing
-token-shredder convert big.pdf -q             # no report, errors only (-v for progress messages)
+
+# Token budget: the highest detail level that fits, truncated (and marked) if nothing fits
+token-shredder convert app.py --max-tokens 2000
+
+# Folders (recursive). With a budget it is shared: small files stay whole, big ones get the rest.
+token-shredder batch ./docs -o ./docs-md                    # one .md per file
+token-shredder batch ./src --max-tokens 20000 -o - | pbcopy  # one document, <file path="..."> blocks
+
+# Machine-readable output for scripts and tools
+token-shredder convert data.json --json        # {"markdown": ..., "output_tokens": ..., ...}
 ```
 
-```python
-from token_shredder import convert_file
+`-q` prints only errors, `-v` shows progress. When the output goes to stdout, the token report goes to stderr.
 
-result = convert_file("paper.pdf", output_path="paper.md", show_metrics=False)
+```python
+from token_shredder import convert_file, batch_convert
+
+result = convert_file("paper.pdf", max_tokens=4000, write_output=False, show_metrics=False)
+print(result.detail_level, result.output_tokens)
 print(result.markdown)
 ```
 
@@ -47,15 +67,16 @@ Real public files at the default detail level, tokens counted with tiktoken `cl1
 | Wikipedia "Python" article (HTML; raw page 325,067) | 27,535 | 71,099 | 20,383 | **26%** | 82% |
 | `requests/sessions.py` (Python) | 7,336 | — | 1,398 | **81%** | 32% |
 | Express `router/index.js` (JS) | 3,859 | — | 223 | **94%** | 17% |
-| GitHub issues API, 10 issues (JSON) | 15,234 | — | 966 | **94%** | 13% |
+| GitHub issues API, 10 issues (JSON) | 15,234 | — | 2,584 | **83%** | 17% |
 | GitHub repo API response (JSON) | 1,863 | — | 1,523 | **18%** | 100% |
+| Airport codes, 86,343 rows, 8.8 MB (CSV) | 3,841,232 | — | 799 | **99.98%** | profile |
 
 What this means:
 
 - **PDF / DOCX:** about the same size as plain extracted text (DOCX adds list markers and table layout), and 14–16% smaller than MarkItDown's output on the same files. Use it for clean, structured text — not for compression.
 - **HTML:** headings, paragraphs, lists and tables in page order; navigation, scripts and link URLs dropped. A third of MarkItDown's size on the Wikipedia page, 26% below the page's plain text.
 - **Code:** an outline — classes, methods and functions with signatures and the first docstring paragraph. Good for "what is in this file and how do I call it?", not for editing or debugging (use `-d 5`). Python uses the real parser; other languages use pattern matching.
-- **JSON:** a schema with one example value per key; a list of objects is described once. If that would not be smaller than the data, you get the data minified (lossless), as with the repo response above. `-d 4` always gives all the data.
+- **Data files (JSON, JSONL, CSV, Excel):** a profile — row count, and per field its type, range, length, example values and the values of category-like fields. An 8.8 MB CSV becomes one page. If the profile would not be smaller than the data, you get the data itself (minified JSON / CSV), as with the repo response above. `-d 4` always gives all the data.
 
 The token report the CLI prints uses the same baseline, except for HTML, where it compares with the raw page. Reproduce the table with [`benchmarks/`](benchmarks/).
 
@@ -83,7 +104,7 @@ PDF, DOCX, PPTX, XLSX, HTML, Markdown, TXT, CSV, JSON, JSON5, YAML, TOML, INI, X
 - Converting a `.md` file writes `name.shredded.md`; the input is never overwritten.
 - `convert` caches results for an hour in `~/.token-shredder/cache`; use `--no-cache` to skip it.
 
-## HTTP API
+## HTTP API (optional)
 
 ```bash
 pip install "token-shredder[api]"

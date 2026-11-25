@@ -1,104 +1,96 @@
 """
-token_shredder - Converters Package Init
+token_shredder - Converters Package
+
+Converters are imported on first use, so the CLI starts fast and a format's
+libraries (pypdf, python-docx, openpyxl, ...) load only when needed.
 """
-from token_shredder.converters.pdf_converter import PDFConverter
-from token_shredder.converters.docx_converter import DOCXConverter
-from token_shredder.converters.pptx_converter import PPTXConverter
-from token_shredder.converters.code_converter import CodeConverter
-from token_shredder.converters.json_converter import JSONConverter
-from token_shredder.converters.html_converter import HTMLConverter
-from token_shredder.converters.text_converter import TextConverter
-from token_shredder.converters.css_converter import CSSConverter
-from token_shredder.converters.xlsx_converter import XLSXConverter
-from token_shredder.converters.yaml_converter import YAMLConverter
-from token_shredder.converters.xml_converter import XMLConverter
-from token_shredder.converters.sql_converter import SQLConverter
-from token_shredder.converters.toml_converter import TOMLConverter
-from token_shredder.converters.env_converter import ENVConverter
-from token_shredder.converters.log_converter import LOGConverter
-from token_shredder.converters.markdown_converter import MarkdownConverter
-from token_shredder.converters.ini_converter import INIConverter
-from token_shredder.converters.csv_converter import CSVConverter
-from token_shredder.converters.gitignore_converter import GitignoreConverter
-from token_shredder.converters.svg_converter import SVGConverter
-from token_shredder.converters.graphql_converter import GraphQLConverter
-from token_shredder.converters.proto_converter import ProtoConverter
-from token_shredder.converters.script_converter import ScriptConverter
-from token_shredder.converters.dockerfile_converter import DockerfileConverter
-from token_shredder.converters.makefile_converter import MakefileConverter
-from token_shredder.converters.json5_converter import JSON5Converter
-from token_shredder.converters.ccpp_converter import CCppConverter
+import importlib
+
 from token_shredder.converters.base_converter import BaseConverter
+
+# format (file extension) -> "module:Class"
+CONVERTERS = {
+    'pdf': 'pdf_converter:PDFConverter',
+    'docx': 'docx_converter:DOCXConverter',
+    'pptx': 'pptx_converter:PPTXConverter',
+    'python': 'code_converter:CodeConverter',
+    'py': 'code_converter:CodeConverter',
+    'js': 'code_converter:CodeConverter',
+    'ts': 'code_converter:CodeConverter',
+    'mjs': 'code_converter:CodeConverter',
+    'cjs': 'code_converter:CodeConverter',
+    'tsx': 'code_converter:CodeConverter',
+    'jsx': 'code_converter:CodeConverter',
+    'java': 'code_converter:CodeConverter',
+    'go': 'code_converter:CodeConverter',
+    'rs': 'code_converter:CodeConverter',
+    'json': 'json_converter:JSONConverter',
+    'json5': 'json5_converter:JSON5Converter',
+    'jsonl': 'jsonl_converter:JSONLConverter',
+    'ndjson': 'jsonl_converter:JSONLConverter',
+    'csv': 'csv_converter:CSVConverter',
+    'tsv': 'csv_converter:CSVConverter',
+    'html': 'html_converter:HTMLConverter',
+    'htm': 'html_converter:HTMLConverter',
+    'txt': 'text_converter:TextConverter',
+    'md': 'markdown_converter:MarkdownConverter',
+    'css': 'css_converter:CSSConverter',
+    'xlsx': 'xlsx_converter:XLSXConverter',
+    'xls': 'xlsx_converter:XLSXConverter',
+    'yaml': 'yaml_converter:YAMLConverter',
+    'yml': 'yaml_converter:YAMLConverter',
+    'xml': 'xml_converter:XMLConverter',
+    'sql': 'sql_converter:SQLConverter',
+    'toml': 'toml_converter:TOMLConverter',
+    'env': 'env_converter:ENVConverter',
+    'log': 'log_converter:LOGConverter',
+    'ini': 'ini_converter:INIConverter',
+    'cfg': 'ini_converter:INIConverter',
+    'conf': 'ini_converter:INIConverter',
+    'gitignore': 'gitignore_converter:GitignoreConverter',
+    'dockerignore': 'gitignore_converter:GitignoreConverter',
+    'gitattributes': 'gitignore_converter:GitignoreConverter',
+    'svg': 'svg_converter:SVGConverter',
+    'graphql': 'graphql_converter:GraphQLConverter',
+    'gql': 'graphql_converter:GraphQLConverter',
+    'proto': 'proto_converter:ProtoConverter',
+    'sh': 'script_converter:ScriptConverter',
+    'bash': 'script_converter:ScriptConverter',
+    'zsh': 'script_converter:ScriptConverter',
+    'fish': 'script_converter:ScriptConverter',
+    'ps1': 'script_converter:ScriptConverter',
+    'bat': 'script_converter:ScriptConverter',
+    'cmd': 'script_converter:ScriptConverter',
+    'dockerfile': 'dockerfile_converter:DockerfileConverter',
+    'makefile': 'makefile_converter:MakefileConverter',
+    'mk': 'makefile_converter:MakefileConverter',
+    'c': 'ccpp_converter:CCppConverter',
+    'cpp': 'ccpp_converter:CCppConverter',
+    'cc': 'ccpp_converter:CCppConverter',
+    'cxx': 'ccpp_converter:CCppConverter',
+    'h': 'ccpp_converter:CCppConverter',
+    'hpp': 'ccpp_converter:CCppConverter',
+    'hh': 'ccpp_converter:CCppConverter',
+    'hxx': 'ccpp_converter:CCppConverter',
+}
 
 
 def get_converter(format_type: str):
-    """Get converter for a given file format."""
-    converters = {
-        'pdf': PDFConverter,
-        'docx': DOCXConverter,
-        'pptx': PPTXConverter,
-        'python': CodeConverter,
-        'py': CodeConverter,
-        'js': CodeConverter,
-        'ts': CodeConverter,
-        'mjs': CodeConverter,
-        'cjs': CodeConverter,
-        'tsx': CodeConverter,
-        'jsx': CodeConverter,
-        'java': CodeConverter,
-        'go': CodeConverter,
-        'rs': CodeConverter,
-        'json': JSONConverter,
-        'json5': JSON5Converter,
-        'csv': CSVConverter,
-        'html': HTMLConverter,
-        'htm': HTMLConverter,
-        'txt': TextConverter,
-        'md': MarkdownConverter,
-        'css': CSSConverter,
-        'xlsx': XLSXConverter,
-        'xls': XLSXConverter,
-        'yaml': YAMLConverter,
-        'yml': YAMLConverter,
-        'xml': XMLConverter,
-        'sql': SQLConverter,
-        'toml': TOMLConverter,
-        'env': ENVConverter,
-        'log': LOGConverter,
-        'ini': INIConverter,
-        'cfg': INIConverter,
-        'conf': INIConverter,
-        'gitignore': GitignoreConverter,
-        'dockerignore': GitignoreConverter,
-        'gitattributes': GitignoreConverter,
-        'svg': SVGConverter,
-        'graphql': GraphQLConverter,
-        'gql': GraphQLConverter,
-        'proto': ProtoConverter,
-        'sh': ScriptConverter,
-        'bash': ScriptConverter,
-        'zsh': ScriptConverter,
-        'fish': ScriptConverter,
-        'ps1': ScriptConverter,
-        'bat': ScriptConverter,
-        'cmd': ScriptConverter,
-        'dockerfile': DockerfileConverter,
-        'makefile': MakefileConverter,
-        'mk': MakefileConverter,
-        'c': CCppConverter,
-        'cpp': CCppConverter,
-        'cc': CCppConverter,
-        'cxx': CCppConverter,
-        'h': CCppConverter,
-        'hpp': CCppConverter,
-        'hh': CCppConverter,
-        'hxx': CCppConverter,
-    }
+    """Get a converter instance for a format (file extension), or None."""
+    spec = CONVERTERS.get(format_type.lower())
+    if not spec:
+        return None
+    module, cls = spec.split(":")
+    return getattr(importlib.import_module(f"token_shredder.converters.{module}"), cls)()
 
-    converter_class = converters.get(format_type.lower())
-    if converter_class:
-        return converter_class()
-    return None
+
+def __getattr__(name):
+    # Keep `from token_shredder.converters import PDFConverter` working.
+    for spec in CONVERTERS.values():
+        module, cls = spec.split(":")
+        if cls == name:
+            return getattr(importlib.import_module(f"token_shredder.converters.{module}"), cls)
+    raise AttributeError(name)
 
 
 def detect_file_format(file_path: str) -> str:

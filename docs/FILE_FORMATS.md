@@ -32,12 +32,21 @@
 - Function bodies are dropped; use `-d 5` for the full file
 
 ### JSON (.json)
-- Default detail level 3: schema (keys, types, one example value per key); lists of objects are described once with the union of their keys
+- Default detail level 3: schema (keys, types, one example value per key); every list of objects is profiled once (presence counts, number ranges, string lengths, examples, enums)
 - `--detail-level 4` gives all the data, minified; `5` the original file
 
-### CSV (.csv)
-- Converts to markdown tables
-- Includes row/column counts
+### JSONL / NDJSON (.jsonl, .ndjson)
+- Streamed line by line; level 3 gives a per-field profile (types, ranges, examples, enums) of all rows
+- Blank lines are skipped; lines that are not valid JSON are counted and reported, not fatal
+- `--detail-level 4`: one minified object per line; `5`: the original file
+
+### CSV / TSV (.csv, .tsv)
+- Default level 3: row/column counts, a per-column profile and the first 5 rows as a table, however large the file is
+- `--detail-level 1` column names only, `2` adds types and ranges, `4` and `5` all data as CSV. Delimiter (`,` `;` tab `|`) is detected
+
+### Excel (.xlsx)
+- Same levels as CSV, applied per sheet (header = first non-empty row); `-d 4` and `-d 5` give full tables for every sheet
+- Uncalculated formulas fall back to their formula text
 
 ### HTML (.html)
 - Parses via BeautifulSoup

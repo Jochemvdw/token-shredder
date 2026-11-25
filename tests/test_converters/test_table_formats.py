@@ -73,13 +73,16 @@ def test_docx_table_pipe_and_blank_lines(tmp_path):
 
 def test_csv_newline_pipe_and_blank_line(tmp_path):
     p = tmp_path / "t.csv"
-    p.write_text('a,b\n"line1\nline2","x|y"\n3,4\n', encoding="utf-8")
-    md = CSVConverter().convert_to_markdown(str(p), OPTS)
+    rows = "".join(f"{i},plain{i}\n" for i in range(300))
+    p.write_text('a,b\n"line1\nline2","x|y"\n' + rows, encoding="utf-8")
+    md = CSVConverter().convert_to_markdown(str(p), OPTS)  # level 3: profile + sample rows
     lines = md.split("\n")
     assert lines[0] == ""
     assert "| line1 line2 | x\\|y |" in lines
-    assert "| 3 | 4 |" in lines
-    assert len(lines) == 5  # blank, header, sep, 2 rows
+    # Small files: the data itself is shorter than a profile, so it is returned whole.
+    small = tmp_path / "small.csv"
+    small.write_text('a,b\n"line1\nline2","x|y"\n3,4\n', encoding="utf-8")
+    assert '"line1\nline2","x|y"' in CSVConverter().convert_to_markdown(str(small), OPTS)
 
 
 def test_csv_non_utf8(tmp_path):

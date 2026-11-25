@@ -8,6 +8,7 @@ from typing import Optional
 from token_shredder.converters.base_converter import BaseConverter
 from token_shredder.models import ConversionResult, ConversionOptions
 from token_shredder.utils.logger import setup_logger
+from token_shredder.profiling import profile_records, render_fields, example
 
 logger = setup_logger(__name__)
 
@@ -46,7 +47,7 @@ class JSONConverter(BaseConverter):
             lines.append(f"Top level: {self._type_name(data)}")
             # 1 = top-level keys only, 2 = nested keys, 3 = nested keys + example values
             max_depth = 1 if level == 1 else 3
-            self._schema(data, lines, indent=0, depth=1, max_depth=max_depth, examples=level >= 3)
+            self._schema(data, lines, indent=0, depth=1, max_depth=max_depth, examples=level >= 3, level=level)
             lines.append("")
             lines.append("_Schema only; use `--detail-level 4` for the data._")
             schema = "\n".join(lines)
@@ -57,18 +58,10 @@ class JSONConverter(BaseConverter):
             logger.error(f"Error reading JSON: {e}")
             return f"[Error: {e}]"
 
-    def _schema(self, data, lines, indent, depth, max_depth, examples):
+    def _schema(self, data, lines, indent, depth, max_depth, examples, level=3):
         pad = "  " * indent
         if isinstance(data, list):
-            objects = [x for x in data if isinstance(x, dict)]
-            if objects:
-                # Union of keys across items, first example wins.
-                merged = {}
-                for item in objects:
-                    for k, v in item.items():
-                        merged.setdefault(k, v)
-                lines.append(f"{pad}- each item ({len(data)} items):")
-                self._schema(merged, lines, indent + 1, depth, max_depth, examples)
+            self._profile_list(data, lines, indent, level)
             return
         if not isinstance(data, dict):
             return
@@ -77,13 +70,26 @@ class JSONConverter(BaseConverter):
             if examples and not isinstance(value, (dict, list)):
                 line += f" = {self._example(value)}"
             lines.append(line)
-            if depth < max_depth and isinstance(value, (dict, list)):
-                self._schema(value, lines, indent + 1, depth + 1, max_depth, examples)
+            if isinstance(value, list) and any(isinstance(x, dict) for x in value):
+                self._profile_list(value, lines, indent + 1, level)
+            elif depth < max_depth and isinstance(value, (dict, list)):
+                self._schema(value, lines, indent + 1, depth + 1, max_depth, examples, level)
+
+    @staticmethod
+    def _profile_list(data, lines, indent, level):
+        """Describe a list of objects with the streaming profiler."""
+        objects = [x for x in data if isinstance(x, dict)]
+        if not objects:
+            return
+        pad = "  " * indent
+        profile = profile_records(objects)
+        lines.append(f"{pad}- each item ({len(data):,} items):")
+        for fl in render_fields(profile, level):
+            lines.append(pad + "  " + fl)
 
     @staticmethod
     def _example(value) -> str:
-        text = json.dumps(value, ensure_ascii=False)
-        return text if len(text) <= 28 else text[:25] + '..."'
+        return example(value)
 
     def _type_name(self, value) -> str:
         if isinstance(value, dict):

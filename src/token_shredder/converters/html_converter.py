@@ -68,7 +68,11 @@ class HTMLConverter(BaseConverter):
         if title and title.get_text(strip=True):
             parts += [f"# {title.get_text(strip=True)}", ""]
 
-        root = soup.body or soup
+        root = self._main_content(soup) if level <= 4 else (soup.body or soup)
+        if level <= 4:
+            for tag in root.find_all(self._is_boilerplate):
+                if not tag.decomposed:
+                    tag.decompose()
         emitted = set()
         for el in root.find_all(self._BLOCKS):
             containers = self._CONTAINERS - {'li'} if el.name == 'li' else self._CONTAINERS
@@ -104,6 +108,33 @@ class HTMLConverter(BaseConverter):
             emitted.add(id(el))
 
         return re.sub(r'\n{3,}', '\n\n', "\n".join(parts)).strip() + "\n"
+
+    _BOILERPLATE = {'nav', 'navbar', 'navbox', 'menu', 'sidebar', 'breadcrumb', 'breadcrumbs',
+                    'cookie', 'cookies', 'consent', 'banner', 'advert', 'advertisement', 'ads',
+                    'promo', 'newsletter', 'share', 'sharing', 'social', 'related', 'comments',
+                    'footer', 'toc', 'skip', 'popup', 'modal', 'subscribe', 'mw-editsection'}
+
+    def _is_boilerplate(self, tag) -> bool:
+        if not isinstance(tag, Tag) or tag.name in ('html', 'body', 'main', 'article'):
+            return False
+        words = set()
+        for value in (tag.get('id') or '', *(tag.get('class') or [])):
+            words.update(w for w in re.split(r'[\s_-]+', str(value).lower()) if w)
+            words.add(str(value).lower())
+        return bool(words & self._BOILERPLATE)
+
+    @staticmethod
+    def _main_content(soup):
+        """The page's main content: <main>, role=main, or the biggest <article>."""
+        main = soup.find('main') or soup.find(attrs={'role': 'main'})
+        if main and len(main.get_text(strip=True)) > 200:
+            return main
+        articles = soup.find_all('article')
+        if articles:
+            best = max(articles, key=lambda a: len(a.get_text(strip=True)))
+            if len(best.get_text(strip=True)) > 200:
+                return best
+        return soup.body or soup
 
     def _inline(self, el, level: int, top: bool = True) -> str:
         """Text of el in reading order, skipping nested lists/tables/code blocks."""
