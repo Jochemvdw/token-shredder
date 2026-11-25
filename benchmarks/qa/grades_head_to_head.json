@@ -1,0 +1,482 @@
+[
+ {
+  "id": 0,
+  "file": "pdf/attention.pdf",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 1,
+  "file": "pdf/attention.pdf",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 2,
+  "file": "pdf/attention.pdf",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 3,
+  "file": "pdf/attention.pdf",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 4,
+  "file": "pdf/attention.pdf",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 5,
+  "file": "pdf/bitcoin.pdf",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 6,
+  "file": "pdf/bitcoin.pdf",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 7,
+  "file": "pdf/bitcoin.pdf",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 8,
+  "file": "pdf/bitcoin.pdf",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 9,
+  "file": "pdf/bitcoin.pdf",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 10,
+  "file": "html/wiki_python.html",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 11,
+  "file": "html/wiki_python.html",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 12,
+  "file": "html/wiki_python.html",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 13,
+  "file": "html/wiki_python.html",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 14,
+  "file": "html/wiki_python.html",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 15,
+  "file": "py/click_core.py",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 16,
+  "file": "py/click_core.py",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 17,
+  "file": "py/click_core.py",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 18,
+  "file": "py/click_core.py",
+  "kind": "detail",
+  "token_shredder": "partial",
+  "markitdown": "correct",
+  "note": "Y lacks IntEnum version"
+ },
+ {
+  "id": 19,
+  "file": "py/click_core.py",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 20,
+  "file": "ts/vscode_strings.ts",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 21,
+  "file": "ts/vscode_strings.ts",
+  "kind": "typical",
+  "token_shredder": "not_in_text",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 22,
+  "file": "ts/vscode_strings.ts",
+  "kind": "typical",
+  "token_shredder": "not_in_text",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 23,
+  "file": "ts/vscode_strings.ts",
+  "kind": "detail",
+  "token_shredder": "partial",
+  "markitdown": "correct",
+  "note": "Y char not given"
+ },
+ {
+  "id": 24,
+  "file": "ts/vscode_strings.ts",
+  "kind": "detail",
+  "token_shredder": "not_in_text",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 25,
+  "file": "json/package_lock.json",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "not_in_text",
+  "note": "ref lockfile detail ok"
+ },
+ {
+  "id": 26,
+  "file": "json/package_lock.json",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "not_in_text",
+  "note": ""
+ },
+ {
+  "id": 27,
+  "file": "json/package_lock.json",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "not_in_text",
+  "note": ""
+ },
+ {
+  "id": 28,
+  "file": "json/package_lock.json",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "not_in_text",
+  "note": ""
+ },
+ {
+  "id": 29,
+  "file": "json/package_lock.json",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "not_in_text",
+  "note": ""
+ },
+ {
+  "id": 30,
+  "file": "csv/titanic.csv",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 31,
+  "file": "csv/titanic.csv",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "partial",
+  "note": "Y approximate"
+ },
+ {
+  "id": 32,
+  "file": "csv/titanic.csv",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "partial",
+  "note": "X no sex totals, estimated cross-tab"
+ },
+ {
+  "id": 33,
+  "file": "csv/titanic.csv",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "partial",
+  "note": "X mean approx"
+ },
+ {
+  "id": 34,
+  "file": "csv/titanic.csv",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 35,
+  "file": "xml/petclinic_pom.xml",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 36,
+  "file": "xml/petclinic_pom.xml",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 37,
+  "file": "xml/petclinic_pom.xml",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 38,
+  "file": "xml/petclinic_pom.xml",
+  "kind": "detail",
+  "token_shredder": "partial",
+  "markitdown": "correct",
+  "note": "X missing reason"
+ },
+ {
+  "id": 39,
+  "file": "xml/petclinic_pom.xml",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 40,
+  "file": "yaml/gha_node.yml",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 41,
+  "file": "yaml/gha_node.yml",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 42,
+  "file": "yaml/gha_node.yml",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 43,
+  "file": "yaml/gha_node.yml",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 44,
+  "file": "yaml/gha_node.yml",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 45,
+  "file": "md/ripgrep_guide.md",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 46,
+  "file": "md/ripgrep_guide.md",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 47,
+  "file": "md/ripgrep_guide.md",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 48,
+  "file": "md/ripgrep_guide.md",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 49,
+  "file": "md/ripgrep_guide.md",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 50,
+  "file": "txt/rfc9110.txt",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 51,
+  "file": "txt/rfc9110.txt",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 52,
+  "file": "txt/rfc9110.txt",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 53,
+  "file": "txt/rfc9110.txt",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 54,
+  "file": "txt/rfc9110.txt",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 55,
+  "file": "json/github_api_issues.json",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 56,
+  "file": "json/github_api_issues.json",
+  "kind": "typical",
+  "token_shredder": "partial",
+  "markitdown": "correct",
+  "note": "X no date/title truncated"
+ },
+ {
+  "id": 57,
+  "file": "json/github_api_issues.json",
+  "kind": "typical",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 58,
+  "file": "json/github_api_issues.json",
+  "kind": "detail",
+  "token_shredder": "not_in_text",
+  "markitdown": "correct",
+  "note": ""
+ },
+ {
+  "id": 59,
+  "file": "json/github_api_issues.json",
+  "kind": "detail",
+  "token_shredder": "correct",
+  "markitdown": "correct",
+  "note": ""
+ }
+]

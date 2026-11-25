@@ -73,7 +73,7 @@ Real public files at the default detail level, tokens counted with tiktoken `cl1
 
 ¹ The article text is kept; the reference list, "See also" and external links are dropped at the default level (`-d 4` keeps them).
 
-Across a wider test set of 98 public files (papers, RFCs, READMEs, web pages, code in 6 languages, lock files, feeds, spreadsheets, configs; `benchmarks/robustness.py`), the default level produces 492,638 tokens from 17.3 million, with no crashes, budget overruns or size inversions. In a question-answering check (60 questions about 12 of those files, answered by a model that only saw the default output) 51 of 60 answers were fully right. The misses are what an outline drops by design — how a function works inside, which row holds a maximum — and need `--detail-level 4` or `5`.
+Across a wider test set of 98 public files (papers, RFCs, READMEs, web pages, code in 6 languages, lock files, feeds, spreadsheets, configs; `benchmarks/robustness.py`), the default level produces 492,638 tokens from 17.3 million, with no crashes, budget overruns or size inversions. 
 
 What this means:
 
@@ -83,6 +83,26 @@ What this means:
 - **Data files (JSON, JSONL, CSV, Excel):** a profile — row count, and per field its type, range, mean, length, example values and category counts — plus an index line per record (issue number + title, package + version; up to a few hundred records). An 8.8 MB CSV becomes one page. If the profile would not be smaller than the data, you get the data itself (minified JSON / CSV), as with the repo response above. `-d 4` always gives all the data.
 
 The token report the CLI prints uses the same baseline, except for HTML, where it compares with the raw page. Reproduce the table with [`benchmarks/`](benchmarks/).
+
+## Head-to-head with MarkItDown: answers vs tokens
+
+60 questions about 12 files (papers, a Wikipedia page, an RFC, code, a CSV, an npm lockfile, GitHub API JSON, configs), written from the original files. A model (Claude Sonnet) answered them twice, once from each tool's output, without knowing which tool made which text; a separate model graded the answers blind against reference answers.
+
+| | Tokens given to the model | Fully correct | Partly correct | Not answerable |
+|---|---:|---:|---:|---:|
+| MarkItDown | 1,201,114 | 52 / 60 | 3 | 5 ¹ |
+| Token Shredder (default level) | **165,892** | **52 / 60** | 4 | 4 |
+| *without the lockfile* | | | | |
+| MarkItDown | 369,915 | 52 / 55 | 3 | 0 |
+| Token Shredder | **141,989** | 47 / 55 | 4 | 4 |
+
+¹ MarkItDown's version of the 831k-token lockfile doesn't fit in a 200k context window, so those 5 questions couldn't be asked.
+
+Where each one loses:
+- **Token Shredder** misses implementation details of code ("how does `truncate` work inside?" — the outline has signatures, not bodies) and record-level facts it doesn't index (which issue has the most comments). Use `-d 5` for code you need to read in full.
+- **MarkItDown** gives the model the whole CSV table, but a model reading 40k tokens of rows can't count exactly (survivors, passengers per class) — Token Shredder's profile states those counts. And very large files don't fit at all.
+
+Caveats: one answering model, 60 questions, written by a model; the answering model read parts of four long files (three MarkItDown, one Token Shredder) instead of the whole text. Questions and grades: [`benchmarks/qa/`](benchmarks/qa/).
 
 ## Detail levels
 

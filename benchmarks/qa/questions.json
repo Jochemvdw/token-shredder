@@ -1,0 +1,362 @@
+[
+ {
+  "file": "pdf/attention.pdf",
+  "kind": "typical",
+  "question": "What is this paper about and what is its main contribution?",
+  "reference_answer": "It introduces the Transformer, a sequence transduction architecture based solely on attention mechanisms, dispensing with recurrence and convolutions; it is more parallelizable and faster to train and beats prior models on WMT 2014 translation."
+ },
+ {
+  "file": "pdf/attention.pdf",
+  "kind": "typical",
+  "question": "What are the main components of the Transformer architecture described in the paper?",
+  "reference_answer": "An encoder-decoder structure of stacked layers: encoder with N=6 layers (multi-head self-attention + position-wise feed-forward, with residual connections and layer norm), decoder with N=6 layers adding a third sub-layer attending over encoder output with masked self-attention; uses scaled dot-product attention, multi-head attention, and positional encodings."
+ },
+ {
+  "file": "pdf/attention.pdf",
+  "kind": "typical",
+  "question": "What results did the Transformer achieve on machine translation?",
+  "reference_answer": "Big model: 28.4 BLEU on WMT 2014 English-to-German (over 2 BLEU better than previous best including ensembles) and 41.8 BLEU on English-to-French, a new single-model state of the art, after 3.5 days on eight GPUs."
+ },
+ {
+  "file": "pdf/attention.pdf",
+  "kind": "detail",
+  "question": "What optimizer settings and learning rate warmup did the authors use?",
+  "reference_answer": "Adam with beta1=0.9, beta2=0.98, epsilon=1e-9; learning rate increased linearly for warmup_steps=4000 then decayed proportionally to inverse square root of step number."
+ },
+ {
+  "file": "pdf/attention.pdf",
+  "kind": "detail",
+  "question": "What are the base model hyperparameters: d_model, d_ff, number of heads, and head dimension?",
+  "reference_answer": "d_model=512, d_ff=2048, h=8 heads, d_k=d_v=64 (base model has about 65M parameters, dropout 0.1)."
+ },
+ {
+  "file": "pdf/bitcoin.pdf",
+  "kind": "typical",
+  "question": "What problem does the Bitcoin whitepaper address and how does it propose to solve it?",
+  "reference_answer": "The double-spending problem in electronic payments without a trusted third party; it uses a peer-to-peer network that timestamps transactions by hashing them into an ongoing chain of proof-of-work, so the longest chain is the record."
+ },
+ {
+  "file": "pdf/bitcoin.pdf",
+  "kind": "typical",
+  "question": "What are the steps to run the network?",
+  "reference_answer": "1) New transactions broadcast to all nodes; 2) each node collects them into a block; 3) each works on finding a proof-of-work; 4) a node that finds one broadcasts the block; 5) nodes accept it only if all transactions are valid and unspent; 6) nodes express acceptance by working on the next block using the accepted block's hash as previous hash."
+ },
+ {
+  "file": "pdf/bitcoin.pdf",
+  "kind": "typical",
+  "question": "How does the paper handle disk space and verifying payments without running a full node?",
+  "reference_answer": "Spent transactions can be pruned by hashing transactions in a Merkle tree with only the root in the block header; simplified payment verification keeps only block headers of the longest chain and obtains the Merkle branch linking a transaction to its block."
+ },
+ {
+  "file": "pdf/bitcoin.pdf",
+  "kind": "detail",
+  "question": "How large is a block header and how much storage per year do the headers need?",
+  "reference_answer": "About 80 bytes per header; with blocks every 10 minutes, 80 bytes * 6 * 24 * 365 = 4.2MB per year."
+ },
+ {
+  "file": "pdf/bitcoin.pdf",
+  "kind": "detail",
+  "question": "What hash function does the proof-of-work use as an example and what does it scan for?",
+  "reference_answer": "SHA-256; it scans for a value (by incrementing a nonce) so the hash begins with a required number of zero bits, similar to Adam Back's Hashcash."
+ },
+ {
+  "file": "html/wiki_python.html",
+  "kind": "typical",
+  "question": "What is Python and what are its main characteristics according to this page?",
+  "reference_answer": "A high-level, general-purpose programming language emphasizing readability, using significant indentation, with a batteries-included standard library, garbage collection, multiple paradigms (mainly object-oriented), and dynamic typing with optional static typing."
+ },
+ {
+  "file": "html/wiki_python.html",
+  "kind": "typical",
+  "question": "Who created Python and how did its development history unfold?",
+  "reference_answer": "Guido van Rossum created it at CWI in the Netherlands in the late 1980s as successor to ABC; implementation began December 1989, first release 1991 (0.9.0); he stepped down as BDFL in July 2018 and a five-member Steering Council was elected in January 2019."
+ },
+ {
+  "file": "html/wiki_python.html",
+  "kind": "typical",
+  "question": "What is the Zen of Python and who wrote it?",
+  "reference_answer": "The core philosophy of Python summarized in PEP 20, written by Tim Peters, with aphorisms such as 'Explicit is better than implicit', 'Simple is better than complex', 'Readability counts'."
+ },
+ {
+  "file": "html/wiki_python.html",
+  "kind": "detail",
+  "question": "When were Python 2.0 and Python 3.0 released, and what was the last Python 2 release?",
+  "reference_answer": "Python 2.0 on 16 October 2000; Python 3.0 on 3 December 2008; the last Python 2 release was 2.7.18 in 2020."
+ },
+ {
+  "file": "html/wiki_python.html",
+  "kind": "detail",
+  "question": "What is the name Python derived from, and which PEP covers coding style?",
+  "reference_answer": "The British comedy series Monty Python's Flying Circus; coding style is covered in PEP 8."
+ },
+ {
+  "file": "py/click_core.py",
+  "kind": "typical",
+  "question": "What does this file define and what is its role in Click?",
+  "reference_answer": "It is Click's core module defining the Context, Command (and related), Parameter, Option, Argument and Group classes plus helpers, handling command parsing, invocation, help generation and shell completion."
+ },
+ {
+  "file": "py/click_core.py",
+  "kind": "typical",
+  "question": "What does the Context class do and what are some of its key methods?",
+  "reference_answer": "Context holds the state of a command invocation, tracking parent/info and parameters; key methods include scope, with_resource, call_on_close, close, find_root, find_object, ensure_object, lookup_default, fail, abort, exit, get_usage, get_help, invoke, forward, get_parameter_source."
+ },
+ {
+  "file": "py/click_core.py",
+  "kind": "typical",
+  "question": "How do I find out where a parameter value came from?",
+  "reference_answer": "Use ctx.get_parameter_source(name), which returns a ParameterSource enum (IntEnum): PROMPT, COMMANDLINE, ENVIRONMENT, DEFAULT_MAP, DEFAULT, ordered most to least explicit, so source < ParameterSource.DEFAULT_MAP means it was explicitly set."
+ },
+ {
+  "file": "py/click_core.py",
+  "kind": "detail",
+  "question": "What order are the ParameterSource members in, and in which Click version did it become an IntEnum?",
+  "reference_answer": "PROMPT, COMMANDLINE, ENVIRONMENT, DEFAULT_MAP, DEFAULT (most to least explicit); became IntEnum in version 8.3.3."
+ },
+ {
+  "file": "py/click_core.py",
+  "kind": "detail",
+  "question": "What is the default value of the exit code in Context.exit and what does Command.get_short_help_str default its limit to?",
+  "reference_answer": "Context.exit(code=0) defaults to 0; get_short_help_str(limit=45) defaults to 45."
+ },
+ {
+  "file": "ts/vscode_strings.ts",
+  "kind": "typical",
+  "question": "What is this file and what kinds of helpers does it provide?",
+  "reference_answer": "VS Code's string utility module (MIT licensed, Microsoft): exported helpers for whitespace checks, formatting, escaping, truncation, trim/ltrim/rtrim, regex creation, line splitting, comparison (incl. ignore case), surrogate/code point and grapheme iteration, RTL and ASCII detection."
+ },
+ {
+  "file": "ts/vscode_strings.ts",
+  "kind": "typical",
+  "question": "How do truncate and truncateMiddle work?",
+  "reference_answer": "truncate(value,maxLength,suffix=Ellipsis) returns value if short enough, else cuts to maxLength (avoiding splitting a surrogate pair) and appends the suffix; truncateMiddle keeps a prefix and suffix and puts the suffix (ellipsis) in the middle."
+ },
+ {
+  "file": "ts/vscode_strings.ts",
+  "kind": "typical",
+  "question": "How does the format function substitute arguments?",
+  "reference_answer": "format(value, ...args) replaces {0}, {1} style placeholders (regex /{(\\d+)}/g) with the args; format2 takes a template and a Record of named values."
+ },
+ {
+  "file": "ts/vscode_strings.ts",
+  "kind": "detail",
+  "question": "What is the default suffix used by truncate, and its character?",
+  "reference_answer": "Ellipsis, defined as '\\u2026' (the horizontal ellipsis character)."
+ },
+ {
+  "file": "ts/vscode_strings.ts",
+  "kind": "detail",
+  "question": "What does isFalsyOrWhitespace return for undefined or a whitespace-only string?",
+  "reference_answer": "true (it returns true if the string is falsy/not a string, or str.trim().length === 0)."
+ },
+ {
+  "file": "json/package_lock.json",
+  "kind": "typical",
+  "question": "What project is this package-lock for and what lockfile version is used?",
+  "reference_answer": "The create-react-app monorepo (name 'create-react-app'), lockfileVersion 2, with workspaces packages/* and docusaurus/website."
+ },
+ {
+  "file": "json/package_lock.json",
+  "kind": "typical",
+  "question": "What are the main dev dependencies declared at the root?",
+  "reference_answer": "e.g. eslint ^8.3.0, jest ^27.4.3, prettier ^2.5.0, lerna ^4.0.0, husky ^4.3.8, lint-staged ^12.1.2, puppeteer ^12.0.1, execa, fs-extra, globby, meow, tempy, web-vitals."
+ },
+ {
+  "file": "json/package_lock.json",
+  "kind": "typical",
+  "question": "Does the root package run an install script and which workspaces does it use?",
+  "reference_answer": "Yes, hasInstallScript is true; workspaces are 'packages/*' and 'docusaurus/website'."
+ },
+ {
+  "file": "json/package_lock.json",
+  "kind": "detail",
+  "question": "Which version of react is locked at node_modules/react, and which version of webpack?",
+  "reference_answer": "react 17.0.2; webpack 5.64.4."
+ },
+ {
+  "file": "json/package_lock.json",
+  "kind": "detail",
+  "question": "What versions of lodash and express are locked at the top level, and how many entries are in the 'packages' map?",
+  "reference_answer": "lodash 4.17.21; express 4.17.1; the packages map has 2590 entries (including the root '')."
+ },
+ {
+  "file": "csv/titanic.csv",
+  "kind": "typical",
+  "question": "What columns does this dataset have and what is it about?",
+  "reference_answer": "Titanic passengers, 891 rows, with columns PassengerId, Survived, Pclass, Name, Sex, Age, SibSp, Parch, Ticket, Fare, Cabin, Embarked."
+ },
+ {
+  "file": "csv/titanic.csv",
+  "kind": "typical",
+  "question": "How many passengers survived versus died?",
+  "reference_answer": "342 survived (Survived=1) and 549 did not (Survived=0), out of 891."
+ },
+ {
+  "file": "csv/titanic.csv",
+  "kind": "typical",
+  "question": "What is the breakdown of passengers by class and sex?",
+  "reference_answer": "Pclass: 1st 216, 2nd 184, 3rd 491; Sex: 577 male, 314 female."
+ },
+ {
+  "file": "csv/titanic.csv",
+  "kind": "detail",
+  "question": "What are the minimum, maximum and mean of Age, and how many ages are present?",
+  "reference_answer": "714 ages present; min 0.42, max 80, mean about 29.70."
+ },
+ {
+  "file": "csv/titanic.csv",
+  "kind": "detail",
+  "question": "What is the maximum Fare, and how many passengers embarked at each port?",
+  "reference_answer": "Max fare 512.3292; Embarked S 644, C 168, Q 77, 2 missing."
+ },
+ {
+  "file": "xml/petclinic_pom.xml",
+  "kind": "typical",
+  "question": "What is this POM file for and what is the parent project?",
+  "reference_answer": "Maven build file for spring-petclinic (groupId org.springframework.samples, version 4.0.0-SNAPSHOT) with parent spring-boot-starter-parent 4.1.0."
+ },
+ {
+  "file": "xml/petclinic_pom.xml",
+  "kind": "typical",
+  "question": "Which main dependencies does the project use?",
+  "reference_answer": "Spring Boot starters (actuator, cache, data-jpa, thymeleaf, validation, webmvc), javax.cache cache-api, jakarta xml bind, runtime H2, MySQL, PostgreSQL, Caffeine, webjars (bootstrap, font-awesome), plus devtools and test starters/testcontainers."
+ },
+ {
+  "file": "xml/petclinic_pom.xml",
+  "kind": "typical",
+  "question": "Which build plugins are configured?",
+  "reference_answer": "maven-enforcer-plugin, spring-javaformat-maven-plugin, maven-checkstyle-plugin (with nohttp-checkstyle), native-maven-plugin, spring-boot-maven-plugin, jacoco-maven-plugin, git-commit-id-maven-plugin, cyclonedx-maven-plugin, maven-dependency-plugin, libsass-maven-plugin."
+ },
+ {
+  "file": "xml/petclinic_pom.xml",
+  "kind": "detail",
+  "question": "Which Java version does the project use, and why is Checkstyle pinned to 12.3.1?",
+  "reference_answer": "java.version is 17; Checkstyle stays on v12 because v13 sets minimal JDK to 21."
+ },
+ {
+  "file": "xml/petclinic_pom.xml",
+  "kind": "detail",
+  "question": "What versions of Bootstrap webjar and JaCoCo are used?",
+  "reference_answer": "webjars-bootstrap 5.3.8 and jacoco 0.8.15."
+ },
+ {
+  "file": "yaml/gha_node.yml",
+  "kind": "typical",
+  "question": "What does this GitHub Actions workflow do?",
+  "reference_answer": "Node.js CI: on push and pull request to the default branch it checks out code, sets up Node, runs npm ci, npm run build if present, and npm test, across a matrix of Node versions."
+ },
+ {
+  "file": "yaml/gha_node.yml",
+  "kind": "typical",
+  "question": "When is the workflow triggered?",
+  "reference_answer": "On push and on pull_request to branches [$default-branch]."
+ },
+ {
+  "file": "yaml/gha_node.yml",
+  "kind": "typical",
+  "question": "How are dependencies installed and cached?",
+  "reference_answer": "actions/setup-node@v4 with cache: 'npm' and then `npm ci` for a clean install."
+ },
+ {
+  "file": "yaml/gha_node.yml",
+  "kind": "detail",
+  "question": "Which Node versions are in the build matrix and which runner is used?",
+  "reference_answer": "18.x, 20.x, 22.x on ubuntu-latest."
+ },
+ {
+  "file": "yaml/gha_node.yml",
+  "kind": "detail",
+  "question": "Which versions of actions/checkout and actions/setup-node are used?",
+  "reference_answer": "Both v4."
+ },
+ {
+  "file": "md/ripgrep_guide.md",
+  "kind": "typical",
+  "question": "What is this document and what topics does it cover?",
+  "reference_answer": "The ripgrep User Guide: basics, recursive search, automatic filtering, glob and file type filtering, replacements, configuration file, file encoding, binary data, preprocessor (--pre), and common options."
+ },
+ {
+  "file": "md/ripgrep_guide.md",
+  "kind": "typical",
+  "question": "How do I set up a ripgrep configuration file?",
+  "reference_answer": "Set the RIPGREP_CONFIG_PATH environment variable to the file path; each line is one shell argument (whitespace trimmed), lines starting with # are comments; no escaping."
+ },
+ {
+  "file": "md/ripgrep_guide.md",
+  "kind": "typical",
+  "question": "How can I define a custom file type like 'web'?",
+  "reference_answer": "Use --type-add 'web:*.{html,css,js}' and then -tweb (or --type web); put it in an alias or config file to make it permanent; list globs with --type-list."
+ },
+ {
+  "file": "md/ripgrep_guide.md",
+  "kind": "detail",
+  "question": "In a config file, how must a flag with a value be written?",
+  "reference_answer": "Either as a single line with '=' like --max-columns=150, or flag and value on two separate lines; '--max-columns 150' on one line does not work."
+ },
+ {
+  "file": "md/ripgrep_guide.md",
+  "kind": "detail",
+  "question": "Which ripgrep version's source archive does the guide download in its example?",
+  "reference_answer": "15.1.0 (https://github.com/BurntSushi/ripgrep/archive/15.1.0.zip)."
+ },
+ {
+  "file": "txt/rfc9110.txt",
+  "kind": "typical",
+  "question": "What is RFC 9110 about?",
+  "reference_answer": "HTTP Semantics: the overall architecture of HTTP, common terminology, and protocol elements shared across all HTTP versions, extensibility, and the http and https URI schemes; Standards Track, June 2022, STD 97."
+ },
+ {
+  "file": "txt/rfc9110.txt",
+  "kind": "typical",
+  "question": "Which RFCs does RFC 9110 obsolete?",
+  "reference_answer": "2818, 7231, 7232, 7233, 7235, 7538, 7615, 7694, and portions of 7230 (it also updates RFC 3864)."
+ },
+ {
+  "file": "txt/rfc9110.txt",
+  "kind": "typical",
+  "question": "What request methods does it define and what do they do?",
+  "reference_answer": "GET (transfer representation), HEAD (GET without content), POST (resource-specific processing), PUT (replace), DELETE (remove), CONNECT (tunnel), OPTIONS (communication options), TRACE (message loop-back test)."
+ },
+ {
+  "file": "txt/rfc9110.txt",
+  "kind": "detail",
+  "question": "What are the default ports for the http and https URI schemes?",
+  "reference_answer": "TCP port 80 for http and TCP port 443 for https."
+ },
+ {
+  "file": "txt/rfc9110.txt",
+  "kind": "detail",
+  "question": "What minimum URI length should senders and recipients support?",
+  "reference_answer": "It is RECOMMENDED to support URIs of at least 8000 octets."
+ },
+ {
+  "file": "json/github_api_issues.json",
+  "kind": "typical",
+  "question": "What does this file contain?",
+  "reference_answer": "A JSON array of 30 GitHub issue/PR objects, all open, from the psf/requests-style repository, with fields such as number, title, user, labels, comments, created_at, body."
+ },
+ {
+  "file": "json/github_api_issues.json",
+  "kind": "typical",
+  "question": "What is the most recent issue and what is it about?",
+  "reference_answer": "#7651, 'parse_dict_header does not strip spaces around `=`, breaking digest auth when the server sends spaces', opened by swastiktawate on 2026-11-21."
+ },
+ {
+  "file": "json/github_api_issues.json",
+  "kind": "typical",
+  "question": "Which issues relate to cookies or form fields?",
+  "reference_answer": "#7649 RequestsCookieJar multiple_domains() returns incorrect results; #7634 Non-string form field names raise AttributeError when files are attached."
+ },
+ {
+  "file": "json/github_api_issues.json",
+  "kind": "detail",
+  "question": "Which issue has the most comments and how many?",
+  "reference_answer": "#7634 'Non-string form field names raise AttributeError when files are attached' with 12 comments."
+ },
+ {
+  "file": "json/github_api_issues.json",
+  "kind": "detail",
+  "question": "How many of the items are pull requests, and what state are all items in?",
+  "reference_answer": "4 have a pull_request field; all 30 are open."
+ }
+]

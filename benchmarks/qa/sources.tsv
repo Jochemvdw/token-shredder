@@ -1,0 +1,13 @@
+file	url
+pdf/attention.pdf	https://arxiv.org/pdf/1706.03762
+pdf/bitcoin.pdf	https://bitcoin.org/bitcoin.pdf
+html/wiki_python.html	https://en.wikipedia.org/wiki/Python_(programming_language)
+md/ripgrep_guide.md	https://raw.githubusercontent.com/BurntSushi/ripgrep/master/GUIDE.md
+py/click_core.py	https://raw.githubusercontent.com/pallets/click/main/src/click/core.py
+ts/vscode_strings.ts	https://raw.githubusercontent.com/microsoft/vscode/main/src/vs/base/common/strings.ts
+json/package_lock.json	https://raw.githubusercontent.com/facebook/create-react-app/main/package-lock.json
+json/github_api_issues.json	https://api.github.com/repos/psf/requests/issues?per_page=30
+csv/titanic.csv	https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv
+xml/petclinic_pom.xml	https://raw.githubusercontent.com/spring-projects/spring-petclinic/main/pom.xml
+txt/rfc9110.txt	https://www.rfc-editor.org/rfc/rfc9110.txt
+yaml/gha_node.yml	https://raw.githubusercontent.com/actions/starter-workflows/main/ci/node.js.yml
