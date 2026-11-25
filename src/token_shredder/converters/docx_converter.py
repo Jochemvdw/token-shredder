@@ -2,6 +2,7 @@
 token_shredder - DOCX Converter
 Converts Word documents to markdown with streaming support
 """
+import re
 from docx import Document
 from pathlib import Path
 from typing import Optional
@@ -35,23 +36,41 @@ class DOCXConverter(BaseConverter):
         try:
             doc = Document(file_path)
 
+            prev_list = False
             for para in doc.paragraphs:
                 style = para.style.name.lower() if para.style else ""
+                is_list = style.startswith('list') and bool(para.text.strip())
+                if prev_list and not is_list:
+                    markdown_parts.append("")
+                prev_list = is_list
 
-                if 'heading' in style:
-                    level = int(style.replace('heading ', ''))
+                if style.startswith('heading') and style.replace('heading', '').strip().isdigit():
+                    level = int(style.replace('heading', '').strip())
                     text = para.text
                     if text:
                         markdown_parts.append(f"{'#' * level} {text}")
                         markdown_parts.append("")
+                elif para.text.strip() and style.startswith('list'):
+                    indent = ''
+                    m = re.search(r'(\d+)$', style)
+                    if m and int(m.group(1)) > 1:
+                        indent = '  ' * (int(m.group(1)) - 1)
+                    marker = '1.' if 'number' in style else '-'
+                    markdown_parts.append(f"{indent}{marker} {para.text.strip()}")
                 elif para.text.strip():
                     markdown_parts.append(para.text)
                     markdown_parts.append("")
 
+            if prev_list:
+                markdown_parts.append("")
+
             # Tables
             for table in doc.tables:
-                markdown_parts.append(self._table_to_markdown(table))
-                markdown_parts.append("")
+                md_table = self._table_to_markdown(table)
+                if md_table:
+                    markdown_parts.append("")
+                    markdown_parts.append(md_table)
+                    markdown_parts.append("")
 
         except Exception as e:
             logger.error(f"Error reading DOCX: {e}")
@@ -76,13 +95,14 @@ class DOCXConverter(BaseConverter):
 
         md = []
         # Header
-        header = [cell.text.strip() for cell in table.rows[0].cells]
+        esc = lambda t: t.strip().replace('\r', ' ').replace('\n', ' ').replace('|', '\\|')
+        header = [esc(cell.text) for cell in table.rows[0].cells]
         md.append("| " + " | ".join(header) + " |")
         md.append("| " + " | ".join(["---"] * len(header)) + " |")
 
         # Rows
         for row in table.rows[1:]:
-            cells = [cell.text.strip() for cell in row.cells]
+            cells = [esc(cell.text) for cell in row.cells]
             md.append("| " + " | ".join(cells) + " |")
 
         return "\n".join(md)

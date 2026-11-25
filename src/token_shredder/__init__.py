@@ -1,7 +1,7 @@
 """
 token_shredder - Package Init
 """
-from token_shredder.main import app, convert_file
+from token_shredder.main import app, convert_file, batch_convert, ConversionError
 from token_shredder.api import app as api_app
 from token_shredder.models import ConversionResult, ConversionOptions
 from token_shredder.converters import get_converter, detect_file_format
@@ -17,6 +17,8 @@ except PackageNotFoundError:  # running from a source tree without install
 __all__ = [
     'app',
     'convert_file',
+    'batch_convert',
+    'ConversionError',
     'api_app',
     'ConversionResult',
     'ConversionOptions',

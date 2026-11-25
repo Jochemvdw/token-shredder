@@ -87,5 +87,5 @@ token-shredder quality myfile.py
 This shows:
 - Input/output token counts
 - Token reduction for that file
-- Quality score (0-100)
+- Quality score (0-100): a rough heuristic based on structure, not a measure of how much meaning survived
 - File metadata (lines, functions, classes)

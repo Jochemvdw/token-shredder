@@ -132,7 +132,7 @@ class HTMLConverter(BaseConverter):
 
     def get_file_info(self, file_path: str) -> dict:
         try:
-            with open(file_path) as f:
+            with open(file_path, encoding='utf-8', errors='replace') as f:
                 soup = BeautifulSoup(f.read(), 'html.parser')
             return {
                 'headings': len(soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])),

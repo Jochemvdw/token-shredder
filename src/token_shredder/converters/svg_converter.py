@@ -31,7 +31,7 @@ class SVGConverter(BaseConverter):
     def convert_to_markdown(self, file_path: str, options: ConversionOptions) -> str:
         markdown_parts = []
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                 content = f.read()
 
             markdown_parts.append(f"# SVG: {file_path}")
@@ -82,7 +82,7 @@ class SVGConverter(BaseConverter):
 
     def get_file_info(self, file_path: str) -> dict:
         try:
-            with open(file_path) as f:
+            with open(file_path, encoding='utf-8', errors='replace') as f:
                 content = f.read()
             elements = re.findall(r'<([a-zA-Z]+)', content)
             return {'elements': len(elements), 'size': len(content)}

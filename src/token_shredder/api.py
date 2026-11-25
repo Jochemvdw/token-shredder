@@ -1,35 +1,32 @@
 """
-token_shredder - API Server
+token_shredder - HTTP API
+
+Run with:  pip install "token-shredder[api]"  &&  uvicorn token_shredder.api:app
+Uses the same conversion pipeline as the CLI (token_shredder.main.convert_file).
 """
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel
-from typing import Optional, List
-import tempfile
 import os
-import hashlib
+import tempfile
 from pathlib import Path
+from typing import List
 
-from token_shredder.converters import get_converter, detect_file_format
-from token_shredder.processors import Deduplicator
-from token_shredder.metrics import TokenCounter, QualityScorer
-from token_shredder.utils.file_handler import FileHandler
-from token_shredder.models import ConversionResult, ConversionOptions
-from token_shredder.config import Config, CacheManager
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from pydantic import BaseModel
 
-app = FastAPI(title="Token Shredder API", version="0.3.0")
+from token_shredder.main import ConversionError, _version, convert_file
+
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+
+app = FastAPI(title="Token Shredder API", version=_version())
 
 
 class ConversionResponse(BaseModel):
     markdown: str
     source_file: str
-    target_file: str
     format: str
     source_tokens: int
     output_tokens: int
     tokens_saved: int
     tokens_saved_pct: float
-    quality_score: float
     processing_time_ms: float
     pages: int = 0
     images_count: int = 0
@@ -39,155 +36,67 @@ class ConversionResponse(BaseModel):
 
 class BatchConversionResponse(BaseModel):
     results: List[ConversionResponse]
+    errors: List[str]
     total_tokens_saved: int
     files_processed: int
 
 
+async def _convert_upload(file: UploadFile, detail_level: int, preserve_images: bool,
+                          deduplicate: bool) -> ConversionResponse:
+    name = Path(file.filename or "upload").name
+    content = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"{name}: larger than 100 MB")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # Keep the original name so the format is detected from its extension.
+        tmp_path = os.path.join(tmp_dir, name)
+        with open(tmp_path, "wb") as tmp:
+            tmp.write(content)
+        try:
+            r = convert_file(tmp_path, detail_level=detail_level, preserve_images=preserve_images,
+                             deduplicate=deduplicate, show_metrics=False, cache_enabled=False,
+                             write_output=False)
+        except ConversionError as e:
+            raise HTTPException(status_code=422, detail=str(e).replace(tmp_dir + os.sep, ""))
+    return ConversionResponse(
+        markdown=r.markdown, source_file=name, format=r.format,
+        source_tokens=r.source_tokens, output_tokens=r.output_tokens,
+        tokens_saved=r.tokens_saved, tokens_saved_pct=r.tokens_saved_pct,
+        processing_time_ms=r.processing_time_ms, pages=r.pages,
+        images_count=r.images_count, tables_count=r.tables_count, warnings=r.warnings,
+    )
+
+
 @app.post("/convert", response_model=ConversionResponse)
-async def convert_file(
+async def convert(
     file: UploadFile = File(...),
-    detail_level: int = 3,
+    detail_level: int = Query(3, ge=1, le=5),
     preserve_images: bool = False,
     deduplicate: bool = True,
-    cache_enabled: bool = True,
 ):
-    """Convert uploaded file to markdown."""
-    file_handler = FileHandler()
-    config = Config()
-    cache_manager = config.get_cache_manager() if cache_enabled else None
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
-        content = await file.read()
-        tmp.write(content)
-        tmp_path = tmp.name
-
-    try:
-        if not file_handler.validate_file(tmp_path):
-            raise HTTPException(status_code=400, detail="Invalid file")
-
-        file_format = detect_file_format(tmp_path)
-        converter = get_converter(file_format)
-        if not converter:
-            raise HTTPException(status_code=400, detail=f"Unsupported format: {file_format}")
-
-        options = ConversionOptions(
-            detail_level=detail_level,
-            preserve_images=preserve_images,
-        )
-
-        result = converter.convert(tmp_path, options)
-
-        if deduplicate:
-            dedup = Deduplicator()
-            result.markdown = dedup.process(result.markdown)
-
-        token_counter = TokenCounter()
-        source_md = converter.convert_to_markdown(tmp_path, options)
-        result.source_tokens = token_counter.estimate(source_md)
-        result.output_tokens = token_counter.estimate(result.markdown)
-        result.tokens_saved = result.source_tokens - result.output_tokens
-        result.tokens_saved_pct = (result.tokens_saved / result.source_tokens * 100) if result.source_tokens > 0 else 0.0
-
-        quality_scorer = QualityScorer()
-        result.quality_score = quality_scorer.score(result.markdown, source_md)
-
-        if cache_manager:
-            options_hash = hashlib.md5(f"{detail_level}{preserve_images}".encode()).hexdigest()
-            with open(tmp_path, 'rb') as f:
-                file_content = f.read()
-            content_hash = hashlib.md5(file_content).hexdigest()[:12]
-            cache_manager.set(tmp_path, options_hash, result.markdown)
-
-        return ConversionResponse(
-            markdown=result.markdown,
-            source_file=file.filename,
-            target_file=result.target_file,
-            format=file_format,
-            source_tokens=result.source_tokens,
-            output_tokens=result.output_tokens,
-            tokens_saved=result.tokens_saved,
-            tokens_saved_pct=result.tokens_saved_pct,
-            quality_score=result.quality_score,
-            processing_time_ms=result.processing_time_ms,
-            pages=result.pages,
-            images_count=result.images_count,
-            tables_count=result.tables_count,
-            warnings=result.warnings,
-        )
-
-    finally:
-        os.unlink(tmp_path)
+    """Convert one uploaded file to markdown."""
+    return await _convert_upload(file, detail_level, preserve_images, deduplicate)
 
 
 @app.post("/batch", response_model=BatchConversionResponse)
-async def batch_convert(
+async def batch(
     files: List[UploadFile] = File(...),
-    detail_level: int = 3,
+    detail_level: int = Query(3, ge=1, le=5),
     preserve_images: bool = False,
-    workers: int = 4,
 ):
-    """Batch convert multiple uploaded files."""
-    results = []
-    total_saved = 0
-
-    for file in files:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
-            content = await file.read()
-            tmp.write(content)
-            tmp_path = tmp.name
-
+    """Convert several uploaded files; failures are listed in `errors`."""
+    results, errors = [], []
+    for f in files:
         try:
-            file_handler = FileHandler()
-            if not file_handler.validate_file(tmp_path):
-                continue
-
-            file_format = detect_file_format(tmp_path)
-            converter = get_converter(file_format)
-            if not converter:
-                continue
-
-            options = ConversionOptions(detail_level=detail_level, preserve_images=preserve_images)
-            result = converter.convert(tmp_path, options)
-
-            token_counter = TokenCounter()
-            source_md = converter.convert_to_markdown(tmp_path, options)
-            result.source_tokens = token_counter.estimate(source_md)
-            result.output_tokens = token_counter.estimate(result.markdown)
-            result.tokens_saved = result.source_tokens - result.output_tokens
-            result.tokens_saved_pct = (result.tokens_saved / result.source_tokens * 100) if result.source_tokens > 0 else 0.0
-
-            results.append(result)
-            total_saved += result.tokens_saved
-        finally:
-            os.unlink(tmp_path)
-
+            results.append(await _convert_upload(f, detail_level, preserve_images, True))
+        except HTTPException as e:
+            errors.append(str(e.detail))
     return BatchConversionResponse(
-        results=[ConversionResponse(
-            markdown=r.markdown,
-            source_file=r.source_file,
-            target_file=r.target_file,
-            format=r.format,
-            source_tokens=r.source_tokens,
-            output_tokens=r.output_tokens,
-            tokens_saved=r.tokens_saved,
-            tokens_saved_pct=r.tokens_saved_pct,
-            quality_score=r.quality_score,
-            processing_time_ms=r.processing_time_ms,
-            pages=r.pages,
-            images_count=r.images_count,
-            tables_count=r.tables_count,
-            warnings=r.warnings,
-        ) for r in results],
-        total_tokens_saved=total_saved,
-        files_processed=len(results),
+        results=results, errors=errors,
+        total_tokens_saved=sum(r.tokens_saved for r in results), files_processed=len(results),
     )
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.3.0"}
-
-
-@app.get("/metrics")
-async def metrics():
-    return {"version": "0.3.0", "cache_enabled": True}
+    return {"status": "ok", "version": _version()}

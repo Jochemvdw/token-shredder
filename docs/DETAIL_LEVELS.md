@@ -14,4 +14,4 @@
 
 Python outlines come from Python's own parser, so they are exact. Other languages use a line-based pattern match: it finds most top-level and member declarations but can miss unusual syntax.
 
-TOML, INI and SQL show their structure at levels 1–4 and the original file at 5. Other text formats (YAML, CSV, Markdown, logs, ...) don't change between levels 1–4.
+Every text format gives the original file at level 5. TOML, INI, SQL, YAML, XML and similar config/data files are summarised at levels 1–4: structure plus short values, so lists and long values are dropped. CSV, Markdown and logs don't change between levels 1–4.

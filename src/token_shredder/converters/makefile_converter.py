@@ -31,7 +31,7 @@ class MakefileConverter(BaseConverter):
     def convert_to_markdown(self, file_path: str, options: ConversionOptions) -> str:
         markdown_parts = []
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                 content = f.read()
 
             markdown_parts.append(f"# Makefile: {file_path}")
@@ -65,7 +65,7 @@ class MakefileConverter(BaseConverter):
 
     def get_file_info(self, file_path: str) -> dict:
         try:
-            with open(file_path) as f:
+            with open(file_path, encoding='utf-8', errors='replace') as f:
                 content = f.read()
             targets = re.findall(r'^\\w+:', content, re.MULTILINE)
             return {'targets': len(targets), 'lines': len(content.splitlines())}

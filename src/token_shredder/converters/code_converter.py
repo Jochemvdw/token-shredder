@@ -33,7 +33,7 @@ class CodeConverter(BaseConverter):
     def convert_to_markdown(self, file_path: str, options: ConversionOptions) -> str:
         markdown_parts = []
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                 source = f.read()
 
             ext = self._get_ext(file_path)
@@ -51,7 +51,7 @@ class CodeConverter(BaseConverter):
 
     def get_file_info(self, file_path: str) -> dict:
         try:
-            with open(file_path) as f:
+            with open(file_path, encoding='utf-8', errors='replace') as f:
                 source = f.read()
             return {
                 'lines': len(source.splitlines()),
@@ -114,7 +114,8 @@ class CodeConverter(BaseConverter):
         if level < 2:
             return f"{prefix} {node.name}"
         ret = f" -> {ast.unparse(node.returns)}" if node.returns else ""
-        return f"{prefix} {node.name}({ast.unparse(node.args)}){ret}"
+        decorators = "".join(f"@{ast.unparse(d)} " for d in node.decorator_list)
+        return f"{decorators}{prefix} {node.name}({ast.unparse(node.args)}){ret}"
 
     def _add_doc(self, parts: list, node, level: int) -> None:
         doc = ast.get_docstring(node)
@@ -128,23 +129,34 @@ class CodeConverter(BaseConverter):
 
     _DECL_RE = re.compile(
         r"^\s*(?:export\s+)?(?:default\s+)?(?:(?:public|private|protected|static|final|abstract|"
-        r"async|override|pub(?:\([^)]*\))?|unsafe|inline|virtual)\s+)*"
-        r"(?:function\b|(?:class|interface|enum|struct|trait|impl|func|fn)\s+[\w$<(]|"
-        r"type\s+\w+\s*=|(?:const|let|var)\s+[\w$]+\s*=\s*(?:async\s*)?(?:function\b|\([^)]*\)\s*=>|[\w$]+\s*=>))"
+        r"async|override|pub(?:\([^)]*\))?|unsafe|inline|virtual|declare)\s+)*"
+        r"(?:function\b|(?:class|interface|enum|struct|trait|impl|func|fn|mod|namespace)\s+[\w$<(]|"
+        r"type\s+\w+(?:<[^>]*>)?\s*=|type\s+\w+\s+\w"
+        r"|(?:const|let|var)\s+[\w$]+\s*(?::[^=]+)?=\s*(?:async\s*)?"
+        r"(?:function\b|\([^)]*\)\s*(?::[^=]+)?=>|[\w$]+\s*=>))"
         r"|^\s*[\w$.]+\s*=\s*(?:async\s+)?function\b"
         r"|^\s*(?:public|private|protected)\s[^;=]*\("
     )
+    # Class members such as "  async find(id: string): Promise<User> {" (JS/TS/Java/C#).
+    _MEMBER_RE = re.compile(
+        r"^\s+(?:(?:public|private|protected|static|async|readonly|get|set|override|abstract)\s+)*"
+        r"(?!(?:if|for|while|switch|catch|return|function|else)\b)[\w$]+\s*(?:<[^>]*>)?\s*\([^;]*\)"
+        r"\s*(?::\s*[^={;]+)?\{\s*$"
+    )
+    # Name position for level 1: the first "(" right after an identifier
+    # (skips Go receivers like "func (s *Server) Handle(").
+    _PARAMS_RE = re.compile(r"(?<=[\w$>])\(.*$")
 
     def _convert_generic(self, source: str, file_path: str, options: ConversionOptions) -> list:
         level = options.detail_level
         lines = source.splitlines()
         parts = [f"## Declarations ({len(lines)} lines)"]
         for i, line in enumerate(lines):
-            if not self._DECL_RE.match(line):
+            if not (self._DECL_RE.match(line) or self._MEMBER_RE.match(line)):
                 continue
             decl = line.strip().rstrip("{").rstrip()
             if level < 2:
-                decl = re.sub(r"\(.*", "", decl)
+                decl = self._PARAMS_RE.sub("", decl)
             if level >= 3:
                 doc = self._leading_comment(lines, i, full=level >= 4)
                 if doc:
@@ -162,7 +174,7 @@ class CodeConverter(BaseConverter):
             j -= 1
         text = []
         for raw in block:
-            t = re.sub(r"^(/\*\*?|\*/|\*|//)\s?", "", raw).strip().rstrip("*/").strip()
+            t = re.sub(r"^(/\*\*?|\*/|\*|///?|//!)\s?", "", raw).strip().rstrip("*/").strip()
             if t.startswith("@") and not full:
                 break
             if t:

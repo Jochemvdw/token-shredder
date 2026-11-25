@@ -32,19 +32,22 @@ class CSVConverter(BaseConverter):
     def convert_to_markdown(self, file_path: str, options: ConversionOptions) -> str:
         markdown_parts = []
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, 'r', encoding='utf-8', errors='replace', newline='') as f:
                 reader = csv.reader(f)
                 rows = list(reader)
 
             if not rows:
                 return ""
 
-            headers = rows[0]
+            esc = lambda c: str(c).replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ').replace('|', '\\|')
+            headers = [esc(h) for h in rows[0]]
+            markdown_parts.append("")
             markdown_parts.append("| " + " | ".join(headers) + " |")
             markdown_parts.append("| " + " | ".join(["---"] * len(headers)) + " |")
             for row in rows[1:51]:
-                markdown_parts.append("| " + " | ".join(str(c) for c in row) + " |")
+                markdown_parts.append("| " + " | ".join(esc(c) for c in row) + " |")
             if len(rows) > 51:
+                markdown_parts.append("")
                 markdown_parts.append(f"... ({len(rows) - 51} more rows)")
 
         except Exception as e:
@@ -55,7 +58,7 @@ class CSVConverter(BaseConverter):
 
     def get_file_info(self, file_path: str) -> dict:
         try:
-            with open(file_path) as f:
+            with open(file_path, 'r', encoding='utf-8', errors='replace', newline='') as f:
                 reader = csv.reader(f)
                 rows = list(reader)
             return {'rows': len(rows) - 1, 'columns': len(rows[0]) if rows else 0}

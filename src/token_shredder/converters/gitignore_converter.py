@@ -30,7 +30,7 @@ class GitignoreConverter(BaseConverter):
     def convert_to_markdown(self, file_path: str, options: ConversionOptions) -> str:
         markdown_parts = []
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                 lines = f.readlines()
 
             markdown_parts.append(f"# {file_path}")
@@ -87,7 +87,7 @@ class GitignoreConverter(BaseConverter):
 
     def get_file_info(self, file_path: str) -> dict:
         try:
-            with open(file_path) as f:
+            with open(file_path, encoding='utf-8', errors='replace') as f:
                 lines = f.readlines()
             patterns = [l for l in lines if l.strip() and not l.strip().startswith('#')]
             return {'patterns': len(patterns), 'total_lines': len(lines)}

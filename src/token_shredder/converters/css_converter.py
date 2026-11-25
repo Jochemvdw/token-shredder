@@ -30,7 +30,7 @@ class CSSConverter(BaseConverter):
     def convert_to_markdown(self, file_path: str, options: ConversionOptions) -> str:
         markdown_parts = []
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                 content = f.read()
 
             markdown_parts.append(f"# CSS Stylesheet: {file_path}")
@@ -78,7 +78,7 @@ class CSSConverter(BaseConverter):
 
     def get_file_info(self, file_path: str) -> dict:
         try:
-            with open(file_path) as f:
+            with open(file_path, encoding='utf-8', errors='replace') as f:
                 content = f.read()
             selectors = content.count('{')
             return {'selectors': selectors, 'lines': len(content.splitlines())}

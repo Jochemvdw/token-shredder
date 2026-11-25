@@ -30,7 +30,7 @@ class SQLConverter(BaseConverter):
     def convert_to_markdown(self, file_path: str, options: ConversionOptions) -> str:
         markdown_parts = []
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                 content = f.read()
 
             if options.detail_level >= 5:
@@ -110,7 +110,7 @@ class SQLConverter(BaseConverter):
 
     def get_file_info(self, file_path: str) -> dict:
         try:
-            with open(file_path) as f:
+            with open(file_path, encoding='utf-8', errors='replace') as f:
                 content = f.read()
             statements = self._split_statements(content)
             return {'statements': len(statements), 'lines': len(content.splitlines())}

@@ -25,7 +25,7 @@ token-shredder convert paper.pdf              # writes paper.md and prints a tok
 token-shredder convert app.py -o app.md
 token-shredder convert data.json -d 4         # all JSON data, minified (default 3 = schema)
 token-shredder convert app.py -d 5             # full file, no compression
-token-shredder batch ./docs -o ./docs-md
+token-shredder batch ./docs -o ./docs-md   # recursive; report.pdf -> docs-md/report.pdf.md
 token-shredder preview page.html              # show output + savings, write nothing
 token-shredder convert big.pdf -q             # no report, errors only (-v for progress messages)
 ```
@@ -45,16 +45,16 @@ Real public files at the default detail level, tokens counted with tiktoken `cl1
 |---|---:|---:|---:|---:|---:|
 | *Attention Is All You Need* (arXiv PDF, 15 p.) | 10,168 | 12,175 | 10,243 | −1% | 100% |
 | IRS form W-9 (PDF) | 9,009 | 9,058 | 9,039 | 0% | 100% |
-| Calibre demo document (DOCX) | 2,386 | 2,943 | 2,496 | −5% | 100% |
-| Wikipedia "Python" article (HTML; raw page 325,067) | 27,535 | 71,099 | 20,379 | **26%** | 82% |
-| `requests/sessions.py` (Python) | 7,336 | — | 1,394 | **81%** | 32% |
+| Calibre demo document (DOCX) | 2,386 | 2,943 | 2,536 | −6% | 100% |
+| Wikipedia "Python" article (HTML; raw page 325,067) | 27,535 | 71,099 | 20,383 | **26%** | 82% |
+| `requests/sessions.py` (Python) | 7,336 | — | 1,398 | **81%** | 32% |
 | Express `router/index.js` (JS) | 3,859 | — | 223 | **94%** | 17% |
-| GitHub issues API, 10 issues (JSON) | 15,234 | — | 965 | **94%** | 13% |
+| GitHub issues API, 10 issues (JSON) | 15,234 | — | 966 | **94%** | 13% |
 | GitHub repo API response (JSON) | 1,863 | — | 1,523 | **18%** | 100% |
 
 What this means:
 
-- **PDF / DOCX:** about the same size as plain extracted text, and ~15% smaller than MarkItDown's output on the same files. Use it for clean, structured text — not for compression.
+- **PDF / DOCX:** about the same size as plain extracted text (DOCX adds list markers and table layout), and 14–16% smaller than MarkItDown's output on the same files. Use it for clean, structured text — not for compression.
 - **HTML:** headings, paragraphs, lists and tables in page order; navigation, scripts and link URLs dropped. A third of MarkItDown's size on the Wikipedia page, 26% below the page's plain text.
 - **Code:** an outline — classes, methods and functions with signatures and the first docstring paragraph. Good for "what is in this file and how do I call it?", not for editing or debugging (use `-d 5`). Python uses the real parser; other languages use pattern matching.
 - **JSON:** a schema with one example value per key; a list of objects is described once. If that would not be smaller than the data, you get the data minified (lossless), as with the repo response above. `-d 4` always gives all the data.
@@ -81,7 +81,17 @@ PDF, DOCX, PPTX, XLSX, HTML, Markdown, TXT, CSV, JSON, JSON5, YAML, TOML, INI, X
 - PDF tables come out as plain text lines.
 - Outlines for languages other than Python come from pattern matching and can miss unusual declarations.
 - Detail levels don't change PDF/DOCX output (except PPTX speaker notes at 4).
+- YAML, TOML, INI, SQL, XML and similar files are summarised at levels 1–4 (structure, short values); use `-d 5` for the full file.
+- Converting a `.md` file writes `name.shredded.md`; the input is never overwritten.
 - `convert` caches results for an hour in `~/.token-shredder/cache`; use `--no-cache` to skip it.
+
+## HTTP API
+
+```bash
+pip install "token-shredder[api]"
+uvicorn token_shredder.api:app
+curl -F file=@paper.pdf "http://127.0.0.1:8000/convert?detail_level=3"
+```
 
 ## Development
 

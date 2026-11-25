@@ -47,6 +47,37 @@ DETAIL_LEVELS = {
 }
 
 
+class ConversionError(Exception):
+    """The file could not be converted; the message is meant for the user."""
+
+
+def resolve_output_path(file_path: str, output_path: Optional[str]) -> Path:
+    """Where the markdown goes. Never the input file itself."""
+    src = Path(file_path).resolve()
+    if output_path:
+        out = Path(output_path)
+        if out.resolve() == src:
+            raise ConversionError(f"Output would overwrite the input file: {file_path}")
+        return out
+    out = Path(file_path).with_suffix('.md')
+    if out.resolve() == src:  # converting a .md file
+        out = Path(file_path).with_name(Path(file_path).stem + '.shredded.md')
+    return out
+
+
+def _write(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding='utf-8')
+
+
+def _version() -> str:
+    from importlib.metadata import PackageNotFoundError, version
+    try:
+        return version('token-shredder')
+    except PackageNotFoundError:
+        return '0'
+
+
 def _read_text(file_path: str) -> str:
     return Path(file_path).read_text(encoding='utf-8', errors='replace')
 
@@ -99,16 +130,18 @@ def convert_file(
 
     problem = file_handler.check_file(file_path)
     if problem:
-        err_console.print(f"[red]{problem}[/red]")
-        raise typer.Exit(1)
+        raise ConversionError(problem)
+    output_file = resolve_output_path(file_path, output_path)
 
     file_format = detect_file_format(file_path)
     logger.info(f"Detected format: {file_format}")
 
     converter = get_converter(file_format)
     if not converter:
-        err_console.print(f"[red]Unsupported format: {file_format}[/red]")
-        raise typer.Exit(1)
+        raise ConversionError(
+            f"Unsupported file type '{Path(file_path).suffix or '(no extension)'}': {file_path}. "
+            "See docs/FILE_FORMATS.md for the supported types."
+        )
 
     file_size = Path(file_path).stat().st_size
     if confirm_large and file_size > 1_000_000:
@@ -117,7 +150,7 @@ def convert_file(
     cache_manager = None
     options_hash = hashlib.md5(
         f"{detail_level}{preserve_images}{embed_images}{include_comments}"
-        f"{deduplicate}{minify_code}{optimize_structure}".encode()
+        f"{deduplicate}{minify_code}{optimize_structure}{file_format}{_version()}".encode()
     ).hexdigest()
     if processing_options.cache_enabled:
         cache_manager = config.get_cache_manager()
@@ -127,7 +160,7 @@ def convert_file(
             result = ConversionResult(
                 markdown=cached,
                 source_file=file_path,
-                target_file=output_path or str(Path(file_path).with_suffix('.md')),
+                target_file=str(output_file),
                 format=file_format,
             )
             result.output_tokens = _token_counter.estimate(cached)
@@ -138,7 +171,7 @@ def convert_file(
                     result.tokens_saved_pct = result.tokens_saved / result.source_tokens * 100
             result.processing_time_ms = (time.time() - start_time) * 1000
             if write_output:
-                Path(result.target_file).write_text(cached)
+                _write(output_file, cached)
             if show_metrics:
                 display_report(result)
             return result
@@ -153,7 +186,13 @@ def convert_file(
             detail_level=detail_level,
         )
     else:
-        result = converter.convert(file_path, options)
+        try:
+            result = converter.convert(file_path, options)
+        except Exception as e:  # converter bug or unreadable file
+            raise ConversionError(f"Could not convert {file_path}: {e}") from e
+        # Converters report read/parse failures as "[Error ...]" text.
+        if result.markdown.lstrip().startswith("[Error"):
+            raise ConversionError(f"Could not convert {file_path}: {result.markdown.strip()}")
     raw_markdown = result.markdown
 
     if detail_level < 5:
@@ -179,13 +218,8 @@ def convert_file(
     if processing_options.cache_enabled and cache_manager:
         cache_manager.set(file_path, options_hash, result.markdown)
 
-    if output_path:
-        output_file = Path(output_path)
-    else:
-        output_file = Path(file_path).with_suffix('.md')
-
     if write_output:
-        output_file.write_text(result.markdown)
+        _write(output_file, result.markdown)
     result.target_file = str(output_file)
 
     if show_metrics:
@@ -224,13 +258,37 @@ def display_report(result: ConversionResult):
     table.add_row("Output Tokens", f"{result.output_tokens:,}")
     table.add_row("Tokens Saved", f"{result.tokens_saved:,} ({result.tokens_saved_pct:.1f}%)")
     table.add_row("", "")
-    table.add_row("Quality Score", f"{result.quality_score:.1f}%")
     table.add_row("Processing Time", f"{result.processing_time_ms:.1f}ms")
     table.add_row("Images", str(result.images_count))
     table.add_row("Tables", str(result.tables_count))
     table.add_row("Pages", str(result.pages))
 
     console.print(Panel(table, border_style="blue"))
+
+
+SUPPORTED_SUFFIXES = {
+    '.pdf', '.docx', '.pptx', '.xlsx', '.xls', '.py', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',
+    '.java', '.go', '.rs', '.json', '.json5', '.csv', '.html', '.htm', '.md', '.txt', '.css',
+    '.yaml', '.yml', '.xml', '.sql', '.toml', '.env', '.log', '.ini', '.cfg', '.conf', '.svg',
+    '.graphql', '.gql', '.proto', '.sh', '.bash', '.zsh', '.fish', '.ps1', '.bat', '.cmd',
+    '.dockerfile', '.mk', '.c', '.cpp', '.cc', '.cxx', '.h', '.hpp', '.hh', '.hxx',
+}
+SUPPORTED_NAMES = {'dockerfile', 'makefile', '.gitignore', '.dockerignore'}
+
+
+def find_batch_files(directory: str) -> List[Path]:
+    """Supported files under directory (recursive), skipping earlier batch output."""
+    files = []
+    for f in sorted(Path(directory).rglob('*')):
+        if not f.is_file() or any(part.startswith('.') and part not in SUPPORTED_NAMES
+                                  for part in f.relative_to(directory).parts):
+            continue
+        suffixes = [s.lower() for s in f.suffixes]
+        if suffixes[-2:-1] and suffixes[-1] == '.md' and suffixes[-2] in SUPPORTED_SUFFIXES:
+            continue  # "report.pdf.md": output of an earlier batch run
+        if f.suffix.lower() in SUPPORTED_SUFFIXES or f.name.lower() in SUPPORTED_NAMES:
+            files.append(f)
+    return files
 
 
 def batch_convert(
@@ -241,73 +299,57 @@ def batch_convert(
     preserve_images: bool = False,
     quiet: bool = False,
 ) -> List[ConversionResult]:
-    """Batch convert all supported files in a directory."""
+    """Convert every supported file under directory.
+
+    Output keeps the original name plus ".md" ("report.pdf" -> "report.pdf.md"), so
+    "a.py" and "a.txt" never overwrite each other. With output_dir the folder
+    structure is mirrored there; otherwise files are written next to the originals.
+    Raises ConversionError at the end if any file failed.
+    """
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    from token_shredder.config import Config
 
-    path = Path(directory)
-    files = []
-    patterns = ['*.pdf', '*.docx', '*.pptx', '*.py', '*.js', '*.ts', '*.tsx',
-                '*.jsx', '*.java', '*.go', '*.rs', '*.json', '*.json5', '*.csv',
-                '*.html', '*.htm', '*.md', '*.txt', '*.css', '*.xlsx', '*.xls',
-                '*.yaml', '*.yml', '*.xml', '*.sql', '*.toml', '*.env', '*.log',
-                '*.ini', '*.cfg', '*.conf', '*.gitignore', '*.dockerignore',
-                '*.svg', '*.graphql', '*.gql', '*.proto', '*.sh', '*.bash',
-                '*.zsh', '*.fish', '*.ps1', '*.bat', '*.cmd', '*.dockerfile',
-                'Dockerfile', '*.makefile', '*.mk', 'Makefile',
-                '*.c', '*.cpp', '*.cc', '*.cxx', '*.h', '*.hpp', '*.hh', '*.hxx']
-    seen = set()
-    for pattern in patterns:
-        for f in list(path.glob(pattern)) + list(path.glob(pattern.upper())):
-            if f.resolve() not in seen:
-                seen.add(f.resolve())
-                files.append(f)
+    root = Path(directory)
+    files = find_batch_files(directory)
+    if not files:
+        err_console.print(f"[yellow]No supported files found in {directory}[/yellow]")
+        return []
 
-    config = Config()
-    cache_manager = config.get_cache_manager()
+    def target(f: Path) -> str:
+        rel = f.relative_to(root)
+        base = Path(output_dir) / rel if output_dir else f
+        return str(base.with_name(base.name + '.md'))
 
-    results = []
-    Path(output_dir).mkdir(parents=True, exist_ok=True) if output_dir else None
+    results, failures = [], []
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = {}
-        for f in files:
-            if output_dir:
-                out_path = str(Path(output_dir) / f.name.replace(f.suffix, '.md'))
-            else:
-                out_path = None
-            future = executor.submit(
-                convert_file,
-                str(f),
-                output_path=out_path,
-                detail_level=detail_level,
-                preserve_images=preserve_images,
-                show_metrics=not quiet,
-                cache_enabled=True,
-            )
-            futures[future] = f.name
-
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            disable=quiet,
-        ) as progress:
+        futures = {
+            executor.submit(convert_file, str(f), output_path=target(f), detail_level=detail_level,
+                            preserve_images=preserve_images, show_metrics=False): f
+            for f in files
+        }
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"),
+                      console=console, disable=quiet, transient=True) as progress:
             task = progress.add_task("Converting files...", total=len(files))
             for future in as_completed(futures):
+                f = futures[future]
                 try:
-                    result = future.result()
-                    results.append(result)
+                    r = future.result()
+                    results.append(r)
                     if not quiet:
-                        console.print(f"[green]Converted: {futures[future]}[/green]")
+                        console.print(f"{f.relative_to(root)} -> {r.target_file} "
+                                      f"({r.source_tokens:,} -> {r.output_tokens:,} tokens)",
+                                      markup=False, highlight=False)
                 except Exception as e:
-                    err_console.print(f"[red]Error converting {futures[future]}: {e}[/red]")
+                    failures.append(f)
+                    err_console.print(f"[red]{e}[/red]")
                 progress.advance(task)
 
-    total_saved = sum(r.tokens_saved for r in results)
     if not quiet:
-        console.print(f"\n[bold]Batch Complete:[/bold] {len(results)} files converted")
-        console.print(f"Total tokens saved: {total_saved:,}")
-
+        src = sum(r.source_tokens for r in results)
+        out = sum(r.output_tokens for r in results)
+        console.print(f"\n{len(results)} converted, {len(failures)} failed. "
+                      f"Tokens: {src:,} -> {out:,}")
+    if failures:
+        raise ConversionError(f"{len(failures)} file(s) failed")
     return results
 
 
@@ -368,7 +410,8 @@ def convert(
 ):
     """Convert a file to markdown."""
     _set_verbosity(quiet, verbose)
-    convert_file(
+    _run_cli(
+        convert_file,
         file_path,
         output_path=output,
         detail_level=detail_level,
@@ -394,7 +437,8 @@ def batch(
 ):
     """Batch convert all supported files in a directory."""
     _set_verbosity(quiet, verbose)
-    batch_convert(
+    _run_cli(
+        batch_convert,
         directory,
         output_dir=output,
         detail_level=detail_level,
@@ -419,9 +463,19 @@ def version():
     console.print(f"Token Shredder v{_v('token-shredder')}")
 
 
+def _run_cli(func, *args, **kwargs):
+    """Run a library call; show ConversionError as a one-line message and exit 1."""
+    try:
+        return func(*args, **kwargs)
+    except ConversionError as e:
+        if func is not batch_convert:  # batch already printed each failure
+            err_console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+
 def _dry_run(file_path: str, detail_level: int) -> ConversionResult:
-    return convert_file(file_path, detail_level=detail_level, show_metrics=False,
-                        cache_enabled=False, write_output=False)
+    return _run_cli(convert_file, file_path, detail_level=detail_level, show_metrics=False,
+                    cache_enabled=False, write_output=False)
 
 
 @app.command()

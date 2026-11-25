@@ -2,13 +2,15 @@
 
 ## REST API
 
+Start it with `pip install "token-shredder[api]"` and `uvicorn token_shredder.api:app`.
+
 ### POST /convert
 
 Convert uploaded file to markdown.
 
 **Parameters**:
 - file: UploadFile (required)
-- detail_level: int (default: 3)
+- detail_level: int 1–5 (default: 3; 422 if out of range)
 - preserve_images: bool (default: false)
 - deduplicate: bool (default: true)
 
@@ -17,13 +19,11 @@ Convert uploaded file to markdown.
 {
   "markdown": "# Converted content...",
   "source_file": "document.pdf",
-  "target_file": "document.md",
   "format": "pdf",
   "source_tokens": 8450,
   "output_tokens": 3820,
   "tokens_saved": 4630,
   "tokens_saved_pct": 54.8,
-  "quality_score": 98.0,
   "processing_time_ms": 2300,
   "pages": 12,
   "images_count": 8,
@@ -31,6 +31,12 @@ Convert uploaded file to markdown.
   "warnings": []
 }
 ```
+
+Errors: 422 with a `detail` message if the file can't be converted, 413 above 100 MB.
+
+### POST /batch
+
+Several `files`; returns `results` (as above), `errors` (one message per failed file), `total_tokens_saved`, `files_processed`.
 
 ### GET /health
 

@@ -25,9 +25,16 @@ class Deduplicator:
 
         fingerprints: Dict[str, str] = {}
 
+        in_fence = False
         for line in lines:
             line_stripped = line.strip()
-            if not line_stripped:
+            if line_stripped.startswith(("```", "~~~")):
+                in_fence = not in_fence
+                output.append(line)
+                continue
+            # Never touch code, table rows or blank lines: a repeated row or
+            # statement there is data, not redundancy.
+            if in_fence or not line_stripped or line_stripped.startswith("|"):
                 output.append(line)
                 continue
 

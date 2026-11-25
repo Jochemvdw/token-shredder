@@ -31,7 +31,7 @@ class JSON5Converter(BaseConverter):
     def convert_to_markdown(self, file_path: str, options: ConversionOptions) -> str:
         markdown_parts = []
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                 data = json5.load(f)
 
             markdown_parts.append(f"# JSON5: {file_path}")
@@ -73,7 +73,7 @@ class JSON5Converter(BaseConverter):
 
     def get_file_info(self, file_path: str) -> dict:
         try:
-            with open(file_path) as f:
+            with open(file_path, encoding='utf-8', errors='replace') as f:
                 data = json5.load(f)
             return {'type': type(data).__name__, 'size': str(len(str(data)))}
         except:

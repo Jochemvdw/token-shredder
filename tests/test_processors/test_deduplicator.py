@@ -48,3 +48,8 @@ Content B
     result = dedup.process(content)
     assert "Content A" in result
     assert "Content B" in result
+
+
+def test_deduplicator_leaves_code_and_tables_alone():
+    content = "| a | 1 |\n| a | 1 |\n```py\nreturn None\nreturn None\n```"
+    assert Deduplicator().process(content) == content
