@@ -360,6 +360,7 @@ class YAMLConverter(BaseConverter):
         return ['.yaml', '.yml']
 
     def convert(self, file_path: str, options: ConversionOptions) -> ConversionResult:
+        self._warnings = []
         markdown = self.convert_to_markdown(file_path, options)
         return ConversionResult(
             markdown=markdown,
@@ -368,6 +369,7 @@ class YAMLConverter(BaseConverter):
             format='yaml',
             detail_level=options.detail_level,
             preserve_images=options.preserve_images,
+            warnings=list(getattr(self, "_warnings", [])),
         )
 
     def convert_to_markdown(self, file_path: str, options: ConversionOptions) -> str:
@@ -380,7 +382,9 @@ class YAMLConverter(BaseConverter):
         try:
             docs = [d for d in yaml.load_all(raw, Loader=_Loader) if d is not None]
         except yaml.YAMLError as e:
-            logger.warning(f"YAML does not parse ({e}); returning it as is")
+            msg = f"YAML does not parse ({str(e).splitlines()[0][:120]}); shown in full, not summarised"
+            logger.warning(msg)
+            getattr(self, "_warnings", []).append(msg)
             return full
         if not docs:
             return "_(Empty file)_" if not raw.strip() else full

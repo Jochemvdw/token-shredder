@@ -20,7 +20,7 @@
 
 | Level | PDF | DOCX | PPTX | TXT / RFC | Markdown |
 |---|---|---|---|---|---|
-| 1 | Title + PDF bookmarks, else numbered / title-case headings | Title + Heading styles | Slide titles | Title + numbered headings (`4.3.2.  Origins`) | `#` headings |
+| 1 | Title + PDF bookmarks, else headings found by font size / bold and numbering (forms get a minimal outline) | Title + Heading styles | Slide titles | Title + numbered headings (`4.3.2.  Origins`) | `#` headings |
 | 2 | + first sentence of each paragraph | same | + first line of each text box | same | same (first item of each list) |
 | **3** | **Cleaned text** | **Cleaned text, tables in document order** | **Slide text and tables** | **Cleaned text** | **Badges, images, HTML comments and tags, link URLs and link reference definitions removed; link text, code blocks and tables kept** |
 | 4 | + `## Page N` markers, table of contents | + header/footer text | + speaker notes | + table of contents | Whitespace-normalised original (URLs, images and HTML back) |

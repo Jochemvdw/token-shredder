@@ -471,3 +471,29 @@ def summarize_table(headers: list, rows: Iterable[list], level: int, full_text: 
     if whole is None:
         return render(level)
     return clamp_levels(render, level, whole)
+
+
+def minify_json_text(text: str) -> str:
+    """Remove whitespace outside strings, keeping everything else byte-for-byte.
+
+    Unlike json.dumps(json.loads(...)) this keeps numbers as written (1e999 stays
+    1e999 instead of becoming the invalid `Infinity`, 1.10 stays 1.10) and keeps
+    duplicate keys. Assumes text is valid JSON.
+    """
+    out = []
+    in_string = escaped = False
+    for ch in text:
+        if in_string:
+            out.append(ch)
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+            out.append(ch)
+        elif ch not in " \t\r\n":
+            out.append(ch)
+    return "".join(out)

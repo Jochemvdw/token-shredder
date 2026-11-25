@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from token_shredder.converters.base_converter import BaseConverter
 from token_shredder.models import ConversionResult, ConversionOptions
-from token_shredder.profiling import Profile, render_profile, clamp_levels
+from token_shredder.profiling import minify_json_text, Profile, render_profile, clamp_levels
 from token_shredder.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -48,7 +48,7 @@ class JSONLConverter(BaseConverter):
                     except ValueError:
                         bad += 1
                         continue
-                    mini = json.dumps(rec, ensure_ascii=False, separators=(",", ":"))
+                    mini = minify_json_text(line)
                     full_len += len(mini) + 1
                     if keep:
                         data_lines.append(mini)
@@ -89,7 +89,8 @@ class JSONLConverter(BaseConverter):
                 if not line:
                     continue
                 try:
-                    lines.append(json.dumps(json.loads(line), ensure_ascii=False, separators=(",", ":")))
+                    json.loads(line)  # skip lines that don't parse
+                    lines.append(minify_json_text(line))
                 except ValueError:
                     pass
         return "```jsonl\n" + "\n".join(lines) + "\n```" + note_text

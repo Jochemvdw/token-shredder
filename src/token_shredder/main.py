@@ -534,7 +534,7 @@ def batch_convert(
             r.target_file = str(out)
         if not quiet:
             err_console.print(f"{Path(src.path).relative_to(root)} -> {r.target_file or '(combined)'} "
-                              f"(level {r.detail_level}{', truncated' if r.warnings else ''}, {r.source_tokens:,} -> "
+                              f"(level {r.detail_level}{', truncated' if any('truncated' in w for w in r.warnings) else ''}, {r.source_tokens:,} -> "
                               f"{r.output_tokens:,} tokens)", markup=False, highlight=False)
 
     if not quiet:

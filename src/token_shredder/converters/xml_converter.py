@@ -320,6 +320,7 @@ class XMLConverter(BaseConverter):
         return ['.xml']
 
     def convert(self, file_path: str, options: ConversionOptions) -> ConversionResult:
+        self._warnings = []
         markdown = self.convert_to_markdown(file_path, options)
         return ConversionResult(
             markdown=markdown,
@@ -328,6 +329,7 @@ class XMLConverter(BaseConverter):
             format='xml',
             detail_level=options.detail_level,
             preserve_images=options.preserve_images,
+            warnings=list(getattr(self, "_warnings", [])),
         )
 
     def convert_to_markdown(self, file_path: str, options: ConversionOptions) -> str:
@@ -340,7 +342,9 @@ class XMLConverter(BaseConverter):
         try:
             root = parse_tree(file_path)
         except Exception as e:
-            logger.warning(f"XML does not parse ({e}); returning it as is")
+            msg = f"XML does not parse ({str(e).splitlines()[0][:120]}); shown in full, not summarised"
+            logger.warning(msg)
+            getattr(self, "_warnings", []).append(msg)
             return full
         if root is None:
             return full

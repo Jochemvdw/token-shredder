@@ -408,7 +408,8 @@ def _join_lines(prev: str, nxt: str, words: Set[str], hyph: Set[str]) -> str:
 
 
 def build_blocks(entries: Sequence[object], known_headings: Optional[Dict[str, int]] = None,
-                 mark_pages: bool = False, detect_title: bool = True) -> List[Block]:
+                 mark_pages: bool = False, detect_title: bool = True,
+                 loose_headings: Optional[bool] = None) -> List[Block]:
     """Turn cleaned lines into blocks: headings, paragraphs, list items, tables, code."""
     known_headings = known_headings or {}
     text_lines = [e for e in entries if isinstance(e, str) and e.strip()]
@@ -423,7 +424,8 @@ def build_blocks(entries: Sequence[object], known_headings: Optional[Dict[str, i
 
     numbered = sum(1 for l in text_lines if numbered_heading(tidy(l)) is not None
                    and _indent(l) <= max(base - 1, 0))
-    loose_headings = numbered < 3 and not known_headings
+    if loose_headings is None:
+        loose_headings = numbered < 3 and not known_headings
 
     blocks: List[Block] = []
     cur: Optional[Block] = None          # open para/list block

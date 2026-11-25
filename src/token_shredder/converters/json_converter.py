@@ -8,7 +8,7 @@ from typing import Optional
 from token_shredder.converters.base_converter import BaseConverter
 from token_shredder.models import ConversionResult, ConversionOptions
 from token_shredder.utils.logger import setup_logger
-from token_shredder.profiling import profile_records, render_fields, example, map_kind, describe_map, clamp_levels, is_id_like
+from token_shredder.profiling import minify_json_text, profile_records, render_fields, example, map_kind, describe_map, clamp_levels, is_id_like
 
 logger = setup_logger(__name__)
 
@@ -37,7 +37,7 @@ class JSONConverter(BaseConverter):
             data = json.loads(content)
 
             level = options.detail_level
-            minified = "```json\n" + json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n```"
+            minified = "```json\n" + minify_json_text(content.strip()) + "\n```"
             if level >= 4:
                 # All the data, minified: lossless and usually much smaller
                 # than pretty-printed JSON.

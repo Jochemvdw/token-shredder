@@ -100,10 +100,10 @@ PDF, DOCX, PPTX, XLSX, HTML, Markdown, TXT, CSV, JSON, JSON5, YAML, TOML, INI, X
 
 ## Known limitations
 
-- No OCR: scanned PDFs give little or no text.
 - PDF tables come out as plain text lines.
 - Outlines for languages other than Python come from pattern matching and can miss unusual declarations.
-- PDF headings come from bookmarks or numbering patterns; documents without either get a weaker outline at `-d 1`.
+- PDF outlines (`-d 1`) come from bookmarks, else from font size, bold text and numbering; forms and slide-style PDFs get only a minimal outline.
+- No OCR yet: scanned PDFs and images give little or no text.
 - YAML, TOML, INI, SQL, XML and similar files are summarised at levels 1–4 (structure, short values); use `-d 5` for the full file.
 - Converting a `.md` file writes `name.shredded.md`; the input is never overwritten.
 - `batch` skips hidden folders and dependency/build folders (`node_modules`, `venv`, `dist`, `build`, `target`, `vendor`, ...).

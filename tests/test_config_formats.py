@@ -200,3 +200,26 @@ def test_json_constant_and_examples_in_converter(tmp_path):
     l3 = _levels(f, tmp_path)[2]
     assert "`kind`: string = repo" in l3
     assert l3.count("https://api.example.com") == 1
+
+
+def test_json_minify_keeps_numbers_as_written(tmp_path):
+    import json
+    from token_shredder.main import convert_file
+    f = tmp_path / "n.json"
+    f.write_text('{"big": 1e999, "price": 1.10, "s": "a \\" b  c"}')
+    md = convert_file(str(f), detail_level=4, show_metrics=False, cache_enabled=False,
+                      write_output=False).markdown
+    body = md.split("\n", 1)[1].rsplit("```", 1)[0].strip() if md.startswith("```") else md
+    assert "1e999" in md and "Infinity" not in md and "1.10" in md and 'a \\" b  c' in md
+
+
+def test_broken_yaml_and_xml_are_flagged(tmp_path):
+    from token_shredder.main import convert_file
+    y = tmp_path / "b.yaml"
+    y.write_text("a: [1,\nb: 2\n" + "c: d\n" * 50)
+    x = tmp_path / "b.xml"
+    x.write_text("<root><item>1</item><item>2" + "<x/>" * 50)
+    for f in (y, x):
+        r = convert_file(str(f), detail_level=1, show_metrics=False, cache_enabled=False,
+                         write_output=False)
+        assert any("does not parse" in w for w in r.warnings)
