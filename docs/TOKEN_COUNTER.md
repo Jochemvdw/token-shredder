@@ -1,31 +1,24 @@
-# Token Shredder - Token Counter Module Doc
+# Token counter
 
-## TokenCounter
+`TokenCounter` estimates token counts with tiktoken. tiktoken is an OpenAI tokenizer, so counts for Claude are estimates: keep a 10-20% margin near a hard limit. See [Known gaps and limitations](../README.md#known-gaps-and-limitations).
 
-Estimates token counts using tiktoken. tiktoken is an OpenAI tokenizer, so counts for Claude are estimates.
+## Methods
 
-### Methods
-
-- `__init__(model: str = "claude-3-5-sonnet-20241022")`
-  Tries the given model name, then falls back to other encodings (ends at cl100k_base).
-
+- `TokenCounter(model="claude-3-5-sonnet-20241022")`: tiktoken knows no Claude models, so in practice this ends up on the `gpt-4` encoding, which is `cl100k_base`. (If tiktoken is unavailable, counts fall back to characters / 4.)
 - `estimate(text: str) -> int`
-  Estimate token count for text.
+- `estimate_file(file_path: str) -> int`: reads the file as UTF-8 text (raises on other encodings and binary files).
+- `TokenCounter.get_supported_models() -> list`
 
-- `estimate_file(file_path: str) -> int`
-  Estimate tokens in a file.
-
-### Usage
+## Usage
 
 ```python
-from token_shredder.metrics import TokenCounter
+from token_shredder import TokenCounter   # or token_shredder.metrics
 
 counter = TokenCounter()
-tokens = counter.estimate("Hello world. This is a test.")
-print(f"{tokens} tokens")
+print(counter.estimate("Hello world. This is a test."))
 ```
 
-### Accuracy
+## Notes
 
-- Counts are estimates, not Claude's exact token counts
-- Runs offline; no API calls required
+- The CLI report ("Source Tokens", "Output Tokens") and `--max-tokens` use this counter.
+- No API calls. tiktoken downloads its encoding file on first use if it is not cached; after that it works offline.

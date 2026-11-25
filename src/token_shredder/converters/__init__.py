@@ -36,7 +36,6 @@ CONVERTERS = {
     'md': 'markdown_converter:MarkdownConverter',
     'css': 'css_converter:CSSConverter',
     'xlsx': 'xlsx_converter:XLSXConverter',
-    'xls': 'xlsx_converter:XLSXConverter',
     'yaml': 'yaml_converter:YAMLConverter',
     'yml': 'yaml_converter:YAMLConverter',
     'xml': 'xml_converter:XMLConverter',

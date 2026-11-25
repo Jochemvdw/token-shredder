@@ -1,5 +1,7 @@
 # Detail levels
 
+Limitations: see [Known gaps and limitations](../README.md#known-gaps-and-limitations).
+
 `--detail-level` / `-d` takes 1–5 and means the same for every format: **higher = more content**. 3 is the default. Level 5 is always the full content with no compression. A higher level never produces a smaller output than a lower one (tested in `tests/test_detail_levels.py`).
 
 | Level | Code (Python, JS/TS, Java, Go, Rust, C/C++) | Data (JSON, CSV, XLSX, ...) | HTML | PDF / DOCX / PPTX |
@@ -66,5 +68,9 @@ Instead of choosing a level, give a budget: `token-shredder convert file -t 4000
 
 - **One file:** the highest level (up to `-d`, default 5) whose output fits. If that level uses less than a quarter of the budget, the next level up is cut to the budget instead (a web page's article text beats its headings). If nothing fits, level 1 is cut. Cut output ends with `[... truncated to fit N tokens]`.
 - **A folder** (`batch -t N`): the budget is shared. Files that are small at full detail get everything; large files split the rest equally, and each gets the best level that fits its share. Leftover budget is offered once more to files still below full detail.
+
+## Questions (`--query`)
+
+`-Q "question"` keeps the normal outline and adds the best-matching parts in full (functions, document sections, CSV rows, JSON records), ranked by keyword relevance (BM25, no model). The outline is level 3 for code and data, headings only (level 1) for prose, unless you set `-d`. Without `-t` up to about 6,000 tokens of matches are added per file; with `-t`, about 65% of the budget goes to matches and the rest to the outline. In `batch`, matches are ranked across all files together. If the whole file is smaller than the result, you get the whole file. A note in the output (`notes` in JSON) says how many parts were included or that nothing matched.
 
 Tokens are counted with tiktoken `cl100k_base`. Claude's tokenizer counts somewhat differently, so keep a margin of about 10–20% if you are close to a hard limit.

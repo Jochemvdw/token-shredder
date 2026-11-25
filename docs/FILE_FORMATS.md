@@ -1,4 +1,12 @@
-# Token Shredder - Supported Formats
+# Supported formats
+
+Limitations (no OCR, pattern-based outlines for non-Python code, no `.doc`/`.xls`/`.ppt`, ...): see [Known gaps and limitations](../README.md#known-gaps-and-limitations).
+
+**Supported:** `.pdf .docx .pptx .xlsx .html .htm .md .txt .csv .tsv .json .json5 .jsonl .ndjson .yaml .yml .toml .ini .cfg .conf .xml .svg .css .sql .graphql .gql .proto .env .log`, shell scripts (`.sh .bash .zsh .fish .ps1 .bat .cmd`), `Dockerfile`, `Makefile`/`.mk`, `.gitignore`/`.dockerignore`/`.gitattributes`, and code: `.py .js .mjs .cjs .ts .jsx .tsx .java .go .rs .c .cpp .cc .cxx .h .hpp .hh .hxx`.
+
+**Not supported:** `.xls`, `.doc`, `.ppt` (save as `.xlsx`/`.docx`/`.pptx`), images, audio, video, EPUB, email, archives. Such files give "Unsupported file type" and exit code 1; `batch` simply ignores them. Formats not detailed below (CSS, SQL, INI, SVG, GraphQL, Protobuf, `.env`, logs, Dockerfile, Makefile, shell, `.gitignore`) get a format-specific summary at levels 1-4 (logs do not change between levels) and the file at 5; `.env` values are never shown.
+
+URLs and stdin are fetched to a temporary file and handled by the converter for their detected format (content type, URL extension, or sniffing; `--type` overrides).
 
 ## Converters
 
@@ -22,9 +30,8 @@
 - Parses via ast module
 - Outline: imports, classes with their methods, functions, signatures and the first docstring paragraph (default level 3)
 - Function bodies are dropped; not suitable when the model must edit or debug the code (use `-d 5` for the full file)
-- Option to include comments (`--include-comments`)
 
-### JavaScript/TypeScript, Java, Go, Rust (.js, .mjs, .ts, .tsx, .jsx, .java, .go, .rs)
+### JavaScript/TypeScript, Java, Go, Rust, C/C++ (.js, .mjs, .cjs, .ts, .tsx, .jsx, .java, .go, .rs, .c, .cpp, .h, ...)
 - Outline: declaration lines (functions, classes, methods, arrow functions) with the first line of the doc comment above them
 - Found by pattern matching, not a full parser, so unusual syntax can be missed
 - Function bodies are dropped; use `-d 5` for the full file
@@ -80,6 +87,4 @@ See [DETAIL_LEVELS.md](DETAIL_LEVELS.md).
 
 ## Output Format
 
-Markdown (.md). There is no `--format` option.
-
-See [BENCHMARKS.md](BENCHMARKS.md) for measured numbers.
+Markdown. There is no `--format` option; `--json` wraps the markdown in a JSON object. Measured numbers: [README](../README.md#what-you-get-measured), [BENCHMARKS.md](BENCHMARKS.md).

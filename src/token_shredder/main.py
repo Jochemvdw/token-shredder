@@ -308,6 +308,77 @@ def _fit_budget(src: _Source, max_level: int, max_tokens: int, opts: dict,
     return truncated
 
 
+QUERY_DEFAULT_TOKENS = 6000   # relevant-parts budget per file when no --max-tokens is given
+QUERY_SHARE = 0.65            # with --max-tokens: share of the budget for relevant parts
+
+
+def _full_text(src: "_Source", opts: dict, cache_enabled: bool) -> str:
+    """A file's full content for query chunking: the file itself for text formats,
+    the full extraction (level 4) for documents and web pages."""
+    if src.format in BINARY_FORMATS or src.format in ("html", "htm", "txt"):
+        # Level 4 = full content, cleaned, with headings (plain-text RFCs get their
+        # numbered sections as headings), which gives better sections to rank.
+        # No dedup here: "[See above]" markers would replace real content in a chunk.
+        return _convert_at_level(src, 4, {**opts, "deduplicate": False}, cache_enabled).markdown
+    if src.format in SECRET_FORMATS:
+        return ""
+    return _read_text(src.path)
+
+
+def _query_chunks(src: "_Source", query: str, opts: dict, cache_enabled: bool) -> list:
+    from token_shredder import query as q
+    chunks = q.chunk_file(_full_text(src, opts, cache_enabled), src.format)
+    ranked = q.rank(chunks, query)
+    for c in ranked:
+        c.source = src.original
+        if opts.get("redact", True):
+            c.text, _found = redact(c.text)
+    return ranked
+
+
+def _with_relevant(outline: ConversionResult, chosen: list, query: str, ranked_count: int,
+                   with_source: bool = False) -> ConversionResult:
+    from token_shredder import query as q
+    result = dataclasses.replace(outline)
+    result.markdown = outline.markdown.rstrip() + "\n" + q.render(chosen, query, with_source)
+    result.output_tokens = _token_counter.estimate(result.markdown)
+    result.warnings = list(outline.warnings) + [
+        f'query "{query}": {len(chosen)} part(s) included in full'
+        + ("" if ranked_count else ", nothing matched")]
+    _set_savings(result)
+    return result
+
+
+def _convert_with_query(src: "_Source", query: str, detail_level: Optional[int],
+                        max_tokens: Optional[int], opts: dict, cache_enabled: bool) -> ConversionResult:
+    from token_shredder import query as q
+    ranked = _query_chunks(src, query, opts, cache_enabled)
+    # The rest of the file is shown as an outline: for prose that's the headings
+    # (level 1; level 3 would already be the full text), for code and data level 3.
+    base_level = detail_level or (1 if src.format in PROSE_FORMATS else 3)
+    if max_tokens is None:
+        chosen = q.select(ranked, QUERY_DEFAULT_TOKENS, _token_counter.estimate)
+        outline = _convert_at_level(src, base_level, opts, cache_enabled)
+    else:
+        chosen = q.select(ranked, int(max_tokens * QUERY_SHARE), _token_counter.estimate)
+        header = _token_counter.estimate(q.render(chosen, query)) if chosen else 30
+        outline = _fit_budget(src, detail_level or (2 if src.format in PROSE_FORMATS else 5),
+                              max(max_tokens - header, 50), opts, cache_enabled)
+    result = _with_relevant(outline, chosen, query, len(ranked))
+    if max_tokens is not None and result.output_tokens > max_tokens:
+        result.markdown = _truncate_to_tokens(result.markdown, max_tokens)
+        result.output_tokens = _token_counter.estimate(result.markdown)
+    # Never more than the whole file: then the whole file is the better answer.
+    if src.format not in BINARY_FORMATS and src.format not in SECRET_FORMATS:
+        full = _convert_at_level(src, 5, opts, cache_enabled)
+        if result.output_tokens >= full.output_tokens and (
+                max_tokens is None or full.output_tokens <= max_tokens):
+            full = dataclasses.replace(full)
+            full.warnings = list(full.warnings) + [f'query "{query}": whole file is smaller']
+            return full
+    return result
+
+
 def convert_file(
     file_path: str,
     output_path: Optional[str] = None,
@@ -326,8 +397,12 @@ def convert_file(
     display_name: Optional[str] = None,
     file_format: Optional[str] = None,
     redact_secrets: bool = True,
+    query: Optional[str] = None,
 ) -> ConversionResult:
     """Convert a file to markdown.
+
+    With query, the parts of the file that best match the question (functions,
+    sections, records) are added in full after the outline; see query.py.
 
     detail_level runs from 1 (smallest: names and structure only) to 5 (full
     content, no compression); default 3. With max_tokens, the highest level that
@@ -346,7 +421,10 @@ def convert_file(
                 minify_code=minify_code, optimize_structure=optimize_structure,
                 redact=redact_secrets)
 
-    if max_tokens is not None:
+    if query and query.strip():
+        result = _convert_with_query(src, query.strip(), detail_level, max_tokens, opts,
+                                     cache_enabled)
+    elif max_tokens is not None:
         result = _fit_budget(src, detail_level or 5, max_tokens, opts, cache_enabled)
     else:
         result = _convert_at_level(src, detail_level or 3, opts, cache_enabled)
@@ -399,7 +477,7 @@ def display_report(result: ConversionResult, out: Optional[Console] = None):
 
 
 SUPPORTED_SUFFIXES = {
-    '.pdf', '.docx', '.pptx', '.xlsx', '.xls', '.py', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',
+    '.pdf', '.docx', '.pptx', '.xlsx', '.py', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',
     '.java', '.go', '.rs', '.json', '.json5', '.jsonl', '.ndjson', '.csv', '.tsv', '.html', '.htm', '.md', '.txt', '.css',
     '.yaml', '.yml', '.xml', '.sql', '.toml', '.env', '.log', '.ini', '.cfg', '.conf', '.svg',
     '.graphql', '.gql', '.proto', '.sh', '.bash', '.zsh', '.fish', '.ps1', '.bat', '.cmd',
@@ -529,6 +607,7 @@ def batch_convert(
     write_output: bool = True,
     cache_enabled: bool = True,
     redact_secrets: bool = True,
+    query: Optional[str] = None,
 ) -> List[ConversionResult]:
     """Convert every supported file under directory.
 
@@ -576,14 +655,33 @@ def batch_convert(
         progress.add_task(f"Converting {len(files)} files...", total=None)
         with ThreadPoolExecutor(max_workers=workers) as executor:
             sources = [s for s in executor.map(prepare, files) if s is not None]
-        if max_tokens is not None and sources:
+        chosen_by_file: dict = {}
+        outline_budget = max_tokens
+        if query and query.strip() and sources:
+            # Rank the parts of all files together: the folder's best matches win,
+            # wherever they are. Outlines of all files share what's left.
+            from token_shredder import query as q
+            pool = [c for s in sources for c in _query_chunks(s, query.strip(), opts, cache_enabled)]
+            pool.sort(key=lambda c: -c.score)
+            rel_budget = (int(max_tokens * QUERY_SHARE) if max_tokens is not None
+                          else QUERY_DEFAULT_TOKENS * 2)
+            for c in q.select(pool, rel_budget, _token_counter.estimate):
+                chosen_by_file.setdefault(c.source, []).append(c)
+            if max_tokens is not None:
+                used = sum(c.tokens for cs in chosen_by_file.values() for c in cs)
+                outline_budget = max(max_tokens - used - 40 * len(chosen_by_file), 50 * len(sources))
+        if outline_budget is not None and sources:
             header = _token_counter.estimate('<file path="some/folder/file_name.ext" '
                                              'detail_level="3">\n\n</file>\n')
-            results = _allocate_budget(sources, max_tokens, detail_level or 5, opts,
+            results = _allocate_budget(sources, outline_budget, detail_level or 5, opts,
                                        cache_enabled, header)
         else:
             results = [_convert_at_level(s, detail_level or 3, opts, cache_enabled)
                        for s in sources]
+        if query and query.strip():
+            results = [_with_relevant(r, chosen_by_file.get(s.original, []), query.strip(), 1)
+                       if chosen_by_file.get(s.original) else r
+                       for s, r in zip(sources, results)]
 
     for src, r in zip(sources, results):
         r.source_file = src.original
@@ -703,9 +801,7 @@ def convert(
     as_json: bool = typer.Option(False, '--json', help="Output JSON (markdown + token counts)"),
     input_type: Optional[str] = typer.Option(
         None, '--type', help="Input format for stdin/URLs when it can't be detected, e.g. json"),
-    preserve_images: bool = typer.Option(False, '--preserve-images', help='Preserve images'),
-    embed_images: bool = typer.Option(False, '--embed-images', help='Embed images as base64'),
-    include_comments: bool = typer.Option(False, '--include-comments', help='Include code comments'),
+    preserve_images: bool = typer.Option(False, '--preserve-images', help='PDF: list how many images each page has'),
     no_deduplicate: bool = typer.Option(False, '--no-deduplicate', help='Skip deduplication'),
     no_minify: bool = typer.Option(False, '--no-minify', help='Skip code minification'),
     quiet: bool = typer.Option(False, '--quiet', '-q', help='Print nothing except errors'),
@@ -713,6 +809,9 @@ def convert(
     no_cache: bool = typer.Option(False, '--no-cache', help='Disable caching'),
     keep_secrets: bool = typer.Option(
         False, '--keep-secrets', help="Don't redact API keys, tokens and private keys"),
+    query: Optional[str] = typer.Option(
+        None, '--query', '-Q',
+        help="A question: the best-matching functions/sections/records are added in full"),
 ):
     """Convert a file, URL or stdin to compact markdown."""
     from token_shredder.sources import SourceError, fetch_url, is_url, read_stdin
@@ -739,8 +838,6 @@ def convert(
             detail_level=detail_level,
             max_tokens=max_tokens,
             preserve_images=preserve_images,
-            embed_images=embed_images,
-            include_comments=include_comments,
             deduplicate=not no_deduplicate,
             minify_code=not no_minify,
             show_metrics=False,
@@ -749,6 +846,7 @@ def convert(
             display_name=materialized.name if materialized else None,
             file_format=materialized.format if materialized else None,
             redact_secrets=not keep_secrets,
+            query=query,
         )
         _run_cli(_emit, [result], result.markdown, to_stdout=to_stdout, copy=copy, as_json=as_json)
         if not quiet:
@@ -777,12 +875,15 @@ def batch(
                               help="Copy one combined document to the clipboard"),
     as_json: bool = typer.Option(False, '--json', help="Output JSON instead of markdown"),
     workers: int = typer.Option(4, '--workers', '-w', min=1, max=64, help='Parallel workers'),
-    preserve_images: bool = typer.Option(False, '--preserve-images', help='Preserve images'),
+    preserve_images: bool = typer.Option(False, '--preserve-images', help='PDF: list how many images each page has'),
     quiet: bool = typer.Option(False, '--quiet', '-q', help='Print nothing except errors'),
     verbose: bool = typer.Option(False, '--verbose', '-v', help='Show progress messages'),
     no_cache: bool = typer.Option(False, '--no-cache', help='Disable caching'),
     keep_secrets: bool = typer.Option(
         False, '--keep-secrets', help="Don't redact API keys, tokens and private keys"),
+    query: Optional[str] = typer.Option(
+        None, '--query', '-Q',
+        help="A question: the best-matching functions/sections/records are added in full"),
 ):
     """Convert all supported files in a folder, optionally within one token budget."""
     _set_verbosity(quiet, verbose)
@@ -805,6 +906,7 @@ def batch(
             write_output=not combined_mode,
             cache_enabled=not no_cache,
             redact_secrets=not keep_secrets,
+            query=query,
         )
     except _PartialBatch as e:  # some files failed: still output the rest, then exit 1
         results, failed = e.results, True

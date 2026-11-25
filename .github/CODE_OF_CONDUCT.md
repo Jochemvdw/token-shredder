@@ -1,4 +1,4 @@
-# Contributing to Token Shredder
+# Code of Conduct
 
 ## Code of Conduct
 

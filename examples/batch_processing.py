@@ -1,24 +1,23 @@
-"""
-token_shredder - Batch Processing Example
-"""
-from pathlib import Path
-from token_shredder import convert_file, batch_convert
+"""Convert a folder, optionally within one token budget.
 
-# Single file conversion
-result = convert_file(
-    "document.pdf",
-    output_path="output.md",
-    detail_level=3
-)
-print(f"Saved {result.tokens_saved} tokens ({result.tokens_saved_pct}%)")
+Usage: python batch_processing.py FOLDER OUTPUT_FOLDER
+Writes OUTPUT_FOLDER/<same structure>/NAME.EXT.md (e.g. report.pdf.md).
+"""
+import sys
 
-# Batch processing
-results = batch_convert(
-    directory="./documents",
-    output_dir="./converted",
-    detail_level=3,
-    workers=4
-)
+from token_shredder import batch_convert, ConversionError
+
+folder, out = sys.argv[1], sys.argv[2]
+
+try:
+    results = batch_convert(folder, output_dir=out, workers=4)
+except ConversionError as e:   # some files failed; the others were still written
+    print(f"Error: {e}")
+    sys.exit(1)
 
 for r in results:
-    print(f"{r.source_file}: {r.tokens_saved_pct:.1f}% saved")
+    print(f"{r.source_file}: {r.source_tokens} -> {r.output_tokens} tokens (level {r.detail_level})")
+
+# One budget for the whole folder, nothing written to disk:
+results = batch_convert(folder, max_tokens=20000, write_output=False, quiet=True)
+print(f"Within budget: {sum(r.output_tokens for r in results)} tokens in {len(results)} files")

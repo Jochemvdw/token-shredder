@@ -1,8 +1,0 @@
-{
-  "name": "Token Shredder",
-  "version": "0.1.0",
-  "description": "Convert files to markdown, convert files to markdown",
-  "icon": "🪨",
-  "triggers": ["shred", "convert", "minimize tokens", "compress file"],
-  "capabilities": ["file_processing", "analysis"]
-}

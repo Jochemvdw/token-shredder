@@ -1,42 +1,20 @@
+"""Before/after on a real file: token counts of the original text and Token Shredder's output.
+
+Usage: python before_after_demo.py FILE [DETAIL_LEVEL]
 """
-token_shredder - Before/After Demo
+import sys
 
-This demonstrates the token savings from conversion.
-"""
-from token_shredder import convert_file, TokenCounter
-from token_shredder.models import ConversionOptions
+from token_shredder import TokenCounter, convert_file
 
-# Example: PDF conversion
-result = convert_file(
-    "document.pdf",
-    output_path="document.md",
-    detail_level=3
-)
+path = sys.argv[1]
+level = int(sys.argv[2]) if len(sys.argv) > 2 else 3
 
+result = convert_file(path, detail_level=level, write_output=False, show_metrics=False)
 counter = TokenCounter()
 
-# Before (raw PDF text)
-raw_text = """
-[PDF Binary Format]
-- Font definitions: Times New Roman, Arial, Courier (30 tokens)
-- Page layout: margins, spacing, indentation (25 tokens)
-- Metadata: creation date, author, version (20 tokens)
-- The quick brown fox jumps over the lazy dog. (10 tokens)
-Total: ~85 tokens for 1 sentence
-"""
-
-# After (markdown)
-markdown_text = """# Quick Brown Fox
-
-The quick brown fox jumps over the lazy dog.
-"""
-
-raw_tokens = counter.estimate(raw_text)
-md_tokens = counter.estimate(markdown_text)
-
-print(f"Raw tokens: {raw_tokens}")
-print(f"Markdown tokens: {md_tokens}")
-print(f"Savings: {raw_tokens - md_tokens} tokens ({(1 - md_tokens/raw_tokens)*100:.1f}%)")
-
-# Caveman (github.com/JuliusBrussee/caveman) is a separate tool that shortens
-# Claude's replies. Its effect is on output and is not added to the above.
+print(f"{path} at detail level {level}")
+print(f"Source tokens (the file as read): {result.source_tokens}")
+print(f"Output tokens: {result.output_tokens} ({result.tokens_saved_pct:.1f}% fewer)")
+print("For PDF/DOCX the source count is the extracted text; the savings are small there.")
+print("---")
+print(result.markdown[:800])

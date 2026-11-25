@@ -1,14 +1,13 @@
 # Benchmarks
 
-Measured results on real public files are in the [README](../README.md#what-you-get-measured). The script and sample list are in [`benchmarks/`](../benchmarks/).
+The measured results are in the [README](../README.md#what-you-get-measured): token counts on nine real public files against a plain-text baseline and MarkItDown, and a 60-question answer test (with its caveats). To reproduce them, see [`benchmarks/README.md`](../benchmarks/README.md). Questions, references and grades: [`benchmarks/qa/`](../benchmarks/qa/).
 
-Summary:
+Reading the numbers:
 
-- PDF / DOCX: cleaned text 5–7% below plain extraction (DOCX: list markers make it slightly larger), 14–21% below MarkItDown; `-d 2` ≈ 40% of the text, `-d 1` the outline.
-- HTML: 97% smaller than the raw page, 65% smaller than its plain text (reference sections dropped), 86% smaller than MarkItDown.
-- Code: 81–94% smaller, because the output is an outline (signatures and docstrings, no function bodies).
-- Data files (default level 3): a profile. 10 GitHub issues: 83% smaller; an 8.8 MB CSV (86k rows): 3.8M → 799 tokens. When the profile would not be smaller, the data itself, minified (GitHub repo response: 18% smaller, lossless).
+- Tokens are counted with tiktoken `cl100k_base`, not Claude's tokenizer: expect 10-20% difference.
+- The baseline is plain extracted text for PDF/DOCX, the page's plain text for HTML, and the raw file for everything else.
+- PDF/DOCX savings are small (cleaned text, same content); the big savings come from web pages, code outlines and data profiles, where content is deliberately left out ([limitations](../README.md#known-gaps-and-limitations)).
 
 ## Wider test set
 
-`benchmarks/robustness.py CORPUS` runs every file through all levels and two budgets and checks: no crash, no empty output, sizes never shrink as the level goes up, budgets never exceeded. On 98 public files (17.3M tokens) the default level gives 466,634 tokens (was 1,026,775 before the corpus-driven tuning), with 0 problems.
+`benchmarks/robustness.py CORPUS_DIR` converts every file at all levels and with token budgets and checks: no crash, no empty output, size never shrinks as the level goes up, budgets never exceeded. On 98 public files (17.3 million tokens) the default level gives 492,638 tokens with 0 problems; on 18 real government Word/PowerPoint/Excel files the same checks pass. It checks invariants, not whether answers survive.

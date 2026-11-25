@@ -1,75 +1,35 @@
-# Token Shredder - CLI Examples
+#!/bin/sh
+# Token Shredder CLI examples. Edit the file names, then run the lines you want.
+set -e
 
-## Basic CLI Usage
-
-```bash
-# Install
 pip install token-shredder
 
-# Convert a PDF
+# One file: writes document.md and prints a token report
 token-shredder convert document.pdf
+token-shredder convert document.pdf -d 2 -o output.md     # detail level 1-5, named output
+token-shredder convert document.pdf -o -                  # markdown on stdout
+token-shredder convert document.pdf --copy                # clipboard
 
-# Convert with options
-token-shredder convert document.pdf --detail-level 2 --output output.md
+# Fit a token budget, or ask a question
+token-shredder convert app.py -t 2000
+token-shredder convert app.py -Q "how are errors handled"
 
-# Batch convert
-token-shredder batch ./documents --output ./converted
+# URLs and stdin
+token-shredder convert https://example.com/article
+curl -s https://api.github.com/repos/python/cpython | token-shredder convert - --type json
 
-# Analyze file
+# A folder
+token-shredder batch ./documents -o ./converted           # one NAME.EXT.md per file
+token-shredder batch ./documents -d 1 -o ./summary        # names and headings only
+token-shredder batch ./src -t 20000 -o - | pbcopy         # one budgeted document with <file> blocks
+
+# Inspect without writing
+token-shredder preview document.pdf
+token-shredder quality document.pdf
 token-shredder analyze document.pdf
-
-# Version
 token-shredder version
-```
 
-## Python API Usage
-
-```python
-from token_shredder import convert_file, get_converter, detect_file_format
-
-# Convert a file
-result = convert_file(
-    "document.pdf",
-    output_path="output.md",
-    detail_level=3,
-    preserve_images=False
-)
-
-print(f"Tokens saved: {result.tokens_saved} ({result.tokens_saved_pct}%)")
-print(f"Quality: {result.quality_score}")
-```
-
-## REST API
-
-```bash
-# Start server
-uvicorn token_shredder.api:app --reload
-
-# Convert via API
-curl -X POST "http://localhost:8000/convert" \\
-  -F "file=@document.pdf" \\
-  -F "detail_level=3"
-```
-
-## Batch Processing
-
-```bash
-# Convert supported files in a directory
-token-shredder batch ./reports --output ./converted --workers 4
-
-# Lowest detail level (names and headings only)
-token-shredder batch ./docs --detail-level 1 --output ./summary
-```
-
-## Caveman Integration
-
-```bash
-# Step 1: Shred the file
-token-shredder convert presentation.pptx --output pres.md
-
-# Step 2: In Claude Code, enable caveman
-# /caveman
-
-# Step 3: Paste the markdown
-# Caveman shortens Claude's replies; Shredder shortens the input. See docs/BENCHMARKS.md for numbers.
-```
+# HTTP API (optional extra)
+pip install "token-shredder[api]"
+uvicorn token_shredder.api:app &
+curl -F file=@document.pdf "http://127.0.0.1:8000/convert?detail_level=3"

@@ -1,53 +1,70 @@
-# Token Shredder - Examples
+# Examples
 
-## Before/After Examples
+Real output from the default level. Limitations: see [Known gaps and limitations](../README.md#known-gaps-and-limitations). Measured sizes on real files are in the [README](../README.md#what-you-get-measured).
 
-### PDF Example
+## Python file
 
-**Before:** a PDF containing one sentence, plus fonts, layout and metadata.
+Input `ex.py`: a module with imports, a class with `__init__` and `run`, and a helper function.
 
-**After (Markdown):**
-```markdown
-# Quick Brown Fox
-
-The quick brown fox jumps over the lazy dog.
+```bash
+token-shredder convert ex.py -o -
 ```
 
-### PPTX Example
-
-**Before:** a 12-slide deck.
-
-**After:**
-```markdown
-## Slide 1: Title
-
-## Slide 2: Content
-...
-```
-
-### Python Code Example
-
-**Before**:
-```python
-import os
-import sys
-from typing import List, Optional
-
-class DataProcessor:
-    """Process incoming data streams."""
-    ...
-```
-
-**After (outline; illustrative)**:
 ```text
-Imports: os, sys, typing
+Simple module.
 
-class DataProcessor
-  Process incoming data streams.
+## Imports
+os, typing
+
+## class DataProcessor
+Process incoming data streams.
+- `def __init__(self, retries: int=3)`
+- `def run(self, items: List[str]) -> Optional[str]`
+  Run all items through the pipeline.
+
+## def helper(x)
 ```
 
-Function bodies, signatures and methods are dropped, so this output is not suitable when the model must edit or debug the code.
+Signatures and the first doc line are kept, function bodies are not. `-d 1` lists names only, `-d 5` gives the file.
 
-## Related tools
+## A question about the code
 
-[Caveman](https://github.com/JuliusBrussee/caveman) is a separate, complementary tool that shortens Claude's replies. Token Shredder only affects the input you send. See [BENCHMARKS.md](BENCHMARKS.md) for measured numbers.
+```bash
+token-shredder convert ex.py -Q "how are retries handled" -o -
+```
+
+Prints the outline above, then the matching class or function in full as a fenced code block.
+
+## A data file
+
+A JSON list of 30 issues, `token-shredder convert issues.json -o -`:
+
+```text
+# JSON File: issues.json
+
+Top level: array(30 items)
+- each item (30 items):
+  - `id`: number 0-29 (int: yes), mean 14.5
+  - `status`: string, enum: closed x15 (50%), open x15 (50%)
+  - `title`: string 7-8 chars, e.g. "Issue 0", "Issue 1", "Issue 2"
+  index (title per item; also status):
+    0: Issue 0 [closed]
+    ...
+
+_Summary; use `--detail-level 4` for the data._
+```
+
+## A folder within a budget
+
+```bash
+token-shredder batch ./src -t 20000 -o - | pbcopy
+```
+
+One document of `<file path="..." detail_level="N">` blocks, 20,000 tokens in total.
+
+## A web page or stdin
+
+```bash
+token-shredder convert https://example.com/article -o article.md
+cat notes.txt | token-shredder convert -
+```
