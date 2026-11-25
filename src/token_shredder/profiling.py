@@ -20,7 +20,14 @@ MAX_FIELDS = 500        # ignore new field names beyond this (maps used as objec
 EXAMPLE_LEN = 28
 KEY_LEN = 64            # distinct-set keys are truncated to this many characters
 MAX_EXAMPLES = 3
+MAX_SUBFIELDS = 12      # a nested object with more distinct keys than this is a map, not flattened
+MAP_MIN_RECORDS = 8     # dict of records: at least this many entries to count as a map
+MAP_MIN_SCALARS = 40    # dict of scalars: at least this many entries to count as a map
+MAP_KEYS_LISTED = 60    # list every key of a map of records up to this many, else a few examples
+MAP_SCALAR_KEYS_LISTED = 150  # same for a map of scalars (dependencies, scripts: the names are the content)
 
+_ID_LIKE = re.compile(r'^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+                      r'|[0-9a-fA-F]{16,}|[A-Za-z][A-Za-z0-9+.-]*://\S+)$')
 _ISO_DATE = re.compile(r'^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$')
 
 
@@ -28,6 +35,13 @@ def example(value) -> str:
     """JSON text of a value, cut to 28 characters."""
     text = json.dumps(value, ensure_ascii=False)
     return text if len(text) <= EXAMPLE_LEN else text[:EXAMPLE_LEN - 3] + '..."'
+
+
+def is_id_like(text: str) -> bool:
+    """URLs, UUIDs, hashes and other long tokens without spaces: one example says it all."""
+    if _ID_LIKE.match(text):
+        return True
+    return len(text) >= 20 and not any(c.isspace() for c in text)
 
 
 def json_type(value) -> str:
@@ -92,6 +106,7 @@ class FieldStats:
     examples: list = field(default_factory=list)
     distinct: Counter = field(default_factory=Counter)
     overflow: bool = False
+    single_example: bool = False
 
     def add(self, value) -> None:
         self.n += 1
@@ -123,8 +138,10 @@ class FieldStats:
             key = value[:KEY_LEN]
         else:
             key = value
-        if len(self.examples) < MAX_EXAMPLES and t == "string":
+        if t == "string" and len(self.examples) < MAX_EXAMPLES and not self.single_example:
             ex = example(value)
+            if not self.examples and (is_id_like(value) or ex.endswith('..."')):
+                self.single_example = True   # URLs, ids, long text: one example is enough
             if ex not in self.examples:
                 self.examples.append(ex)
         if not self.overflow:
@@ -156,6 +173,8 @@ class Profile:
     truncated: bool = False
     fields: dict = field(default_factory=dict)
     skipped_fields: int = 0
+    sub_counts: dict = field(default_factory=dict)   # parent -> flattened sub-field names
+    map_fields: set = field(default_factory=set)     # parents whose keys vary per record
 
     def _stats(self, name):
         st = self.fields.get(name)
@@ -169,14 +188,29 @@ class Profile:
     def add(self, record: dict) -> None:
         self.rows += 1
         for k, v in record.items():
-            st = self._stats(str(k))
+            k = str(k)
+            st = self._stats(k)
             if st is not None:
                 st.add(v)
-            if isinstance(v, dict):
+            if isinstance(v, dict) and k not in self.map_fields:
+                if len(v) > MAX_SUBFIELDS:
+                    self._drop_subfields(k)
+                    continue
                 for k2, v2 in v.items():
-                    st2 = self._stats(f"{k}.{k2}")
+                    name = f"{k}.{k2}"
+                    st2 = self._stats(name)
                     if st2 is not None:
                         st2.add(v2)
+                        subs = self.sub_counts.setdefault(k, set())
+                        subs.add(name)
+                        if len(subs) > MAX_SUBFIELDS:  # keys vary per record: it is a map
+                            self._drop_subfields(k)
+                            break
+
+    def _drop_subfields(self, k: str) -> None:
+        self.map_fields.add(k)
+        for name in self.sub_counts.pop(k, ()):
+            self.fields.pop(name, None)
 
 
 def profile_records(records: Iterable[dict], max_rows: Optional[int] = None) -> Profile:
@@ -212,6 +246,10 @@ def _enum_text(key, count, total) -> str:
     return f"{text} ({_pct(count, total)})"
 
 
+def _example_text(st: FieldStats) -> str:
+    return (", e.g. " + ", ".join(st.examples)) if st.examples else ""
+
+
 def render_field(name: str, st: FieldStats, rows: int, level: int) -> str:
     types = [t for t, _ in st.types.most_common() if t != "null"]
     if "null" in st.types:
@@ -220,6 +258,16 @@ def render_field(name: str, st: FieldStats, rows: int, level: int) -> str:
         return f"- `{name}`: {'|'.join(types)}"
 
     enum = st.enum() if level >= 3 else None
+    constant = enum[0][0] if enum and len(enum) == 1 else None
+    if constant is not None:
+        key = constant[1] if isinstance(constant, tuple) else constant
+        shown = "true" if key is True else "false" if key is False else str(key)
+        if len(shown) > EXAMPLE_LEN:
+            shown = shown[:EXAMPLE_LEN - 1] + "…"
+        line = f"- `{name}`: {' | '.join(types)} = {shown}"
+        if st.n < rows:
+            line += f", {st.n:,}/{rows:,}"
+        return line
     parts = []
     for t in types:
         text = t
@@ -231,8 +279,7 @@ def render_field(name: str, st: FieldStats, rows: int, level: int) -> str:
                 text += f" (date) {st.str_min}–{st.str_max}"
             else:
                 text += f" {st.len_min}–{st.len_max} chars" if st.len_min != st.len_max else f" {st.len_min} chars"
-                if st.examples:
-                    text += ", e.g. " + ", ".join(st.examples)
+                text += _example_text(st)
         parts.append(text)
     line = f"- `{name}`: " + " | ".join(parts)
     if enum:
@@ -243,8 +290,16 @@ def render_field(name: str, st: FieldStats, rows: int, level: int) -> str:
     return line
 
 
+def _rare_subfield(name: str, st: FieldStats, profile: Profile) -> bool:
+    """A flattened `parent.key` seen in under 2% of the records that have the parent."""
+    parent = profile.fields.get(name.rsplit(".", 1)[0]) if "." in name else None
+    return parent is not None and parent.n >= 50 and st.n * 50 < parent.n and name in profile.sub_counts.get(
+        name.rsplit(".", 1)[0], ())
+
+
 def render_fields(profile: Profile, level: int) -> list:
-    lines = [render_field(name, st, profile.rows, level) for name, st in profile.fields.items()]
+    lines = [render_field(name, st, profile.rows, level) for name, st in profile.fields.items()
+             if not _rare_subfield(name, st, profile)]
     if profile.skipped_fields:
         lines.append(f"- ... and more fields (only the first {MAX_FIELDS} are profiled)")
     return lines
@@ -264,6 +319,91 @@ def render_profile(profile: Profile, level: int) -> str:
     return "\n".join(out)
 
 
+# --- maps (dicts used as id -> record lookups) ----------------------------
+
+def map_kind(d: dict) -> Optional[str]:
+    """'records' when d maps many keys to similar objects (npm "packages", OpenAPI
+    "paths"), 'scalars' when it maps very many keys to one scalar type, else None."""
+    n = len(d)
+    if n < MAP_MIN_RECORDS:
+        return None
+    vals = list(d.values())
+    dict_vals = [v for v in vals if isinstance(v, dict)]
+    if len(dict_vals) * 10 >= n * 9:
+        sample = dict_vals[:300]
+        counts = Counter(k for v in sample for k in v)
+        common = {k for k, c in counts.items() if c * 5 >= len(sample)}
+        if not common:
+            return None
+        score = sum((sum(1 for k in v if k in common) / len(v)) if v else 1.0 for v in sample) / len(sample)
+        return "records" if score >= 0.8 else None
+    if n >= MAP_MIN_SCALARS:
+        types = Counter(json_type(v) for v in vals[:300])
+        top, c = types.most_common(1)[0]
+        if top in ("string", "number", "boolean") and c * 10 >= sum(types.values()) * 9:
+            return "scalars"
+    return None
+
+
+def _key_text(key) -> str:
+    text = str(key)
+    return "`" + (text if len(text) <= 40 else text[:39] + "…") + "`"
+
+
+def describe_map(d: dict, kind: str, level: int) -> list:
+    """Lines describing a map: its keys and the shape of its values (no indent)."""
+    keys = list(d)
+    n = len(keys)
+    if n <= (MAP_KEYS_LISTED if kind == "records" else MAP_SCALAR_KEYS_LISTED):
+        picked, label = keys, "keys"
+    else:
+        picked, label = [keys[i * (n - 1) // 3] for i in range(4)], "keys e.g."
+    lines = [f"{label}: " + ", ".join(_key_text(k) for k in picked)]
+    if kind == "records":
+        objs = [v for v in d.values() if isinstance(v, dict)]
+        lines.append("each value (object):")
+        lines.extend("  " + fl for fl in render_fields(profile_records(objs), level))
+    else:
+        st = FieldStats()
+        for v in d.values():
+            st.add(v)
+        lines.append(render_field("value", st, n, level).replace("- `value`:", "each value:", 1))
+    return lines
+
+
+# --- size helpers shared by the data converters -------------------------------
+
+_counter = None
+
+
+def text_size(text: str) -> int:
+    """cl100k tokens for normal sizes, a character estimate for huge texts."""
+    global _counter
+    if len(text) > 300_000:
+        return len(text) // 3
+    if _counter is None:
+        from token_shredder.metrics import TokenCounter
+        _counter = TokenCounter()
+    return _counter.estimate(text)
+
+
+def clamp_levels(render, level: int, full: str) -> str:
+    """Output for `level` (1-4) with the two promises every data converter makes:
+    never larger than `full` (the lossless alternative), and never smaller than the
+    output of the level below. render(lv) gives the lossy text for one level."""
+    full_size = text_size(full)
+    out, out_size = None, 0
+    for lv in range(1, level + 1):
+        cur = render(lv)
+        size = text_size(cur)
+        if size >= full_size or len(cur) >= len(full):
+            cur, size = full, full_size
+        if out is not None and (out_size > size or len(out) > len(cur)):
+            cur, size = out, out_size
+        out, out_size = cur, size
+    return out
+
+
 # --- tables (CSV / XLSX sheets) -------------------------------------------
 
 SAMPLE_ROWS = 5
@@ -279,12 +419,14 @@ def _md_row(cells) -> str:
     return "| " + " | ".join(md_escape(c) for c in cells) + " |"
 
 
-def summarize_table(headers: list, rows: Iterable[list], level: int) -> str:
+def summarize_table(headers: list, rows: Iterable[list], level: int, full_text: Optional[str] = None) -> str:
     """Markdown for a table read as text cells (streaming, bounded memory).
 
     1 = column names; 2 = + types and ranges; 3 = full profile + first 5 rows;
-    4+ = the whole table. A lossy summary that would be longer than the whole
-    table is replaced by the whole table.
+    4+ = the whole table. At every level a summary that is not smaller than the
+    whole table is replaced by the whole table, and sizes never shrink as the
+    level goes up. `full_text` is the lossless alternative when it is not the
+    markdown table (CSV passes the fenced file).
     """
     names = unique_headers(headers)
     ncols = len(names)
@@ -310,22 +452,22 @@ def summarize_table(headers: list, rows: Iterable[list], level: int) -> str:
         if level < 4:
             profile.add({n: infer_cell(str(c)) for n, c in zip(names, row) if c is not None})
 
-    summary = f"Rows: {count:,}, columns: {ncols}"
-    if full is not None and (level >= 4 or keep_full):
-        full_text = "\n".join(full)
-    else:
-        full_text = None
+    full_md = "\n".join(full) if full is not None else None
     if level >= 4:
-        return full_text
+        return full_md
+    summary = f"Rows: {count:,}, columns: {ncols}"
+    profile.rows = count
 
-    if level == 1:
-        lossy = summary + "\n\nColumns: " + ", ".join(f"`{n}`" for n in names)
-    else:
-        profile.rows = count
-        body = render_profile(profile, level).split("\n", 1)[1]
+    def render(lv: int) -> str:
+        if lv == 1:
+            return summary + "\n\nColumns: " + ", ".join(f"`{n}`" for n in names)
+        body = render_profile(profile, lv).split("\n", 1)[1]
         lossy = summary + "\n\n" + body
-        if level >= 3 and sample:
+        if lv >= 3 and sample:
             lossy += f"\n\nFirst {len(sample)} rows:\n\n" + "\n".join(head_lines + sample)
-    if full_text is not None and len(lossy) >= len(full_text):
-        return full_text
-    return lossy
+        return lossy
+
+    whole = full_text if full_text is not None else full_md
+    if whole is None:
+        return render(level)
+    return clamp_levels(render, level, whole)

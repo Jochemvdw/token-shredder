@@ -188,3 +188,59 @@ def test_csv_semicolon_and_tsv_and_monotonic_with_raw(tmp_path):
                              write_output=False).markdown for lv in range(1, 6)]
         assert "score" in outs[0] and "name" in outs[0]
         assert [len(o) for o in outs] == sorted(len(o) for o in outs)
+
+
+# --- map-like dicts, constants, examples ------------------------------------------
+
+def _lock(n=300):
+    return {"name": "app", "lockfileVersion": 3,
+            "packages": {f"node_modules/p{i}": {"version": f"1.{i}.0", "resolved": f"https://registry.npmjs.org/p{i}/-/p{i}-1.{i}.0.tgz",
+                                                "integrity": "sha512-" + "a" * 60, **({"dev": True} if i % 8 == 0 else {})}
+                         for i in range(n)}}
+
+
+def test_map_like_dict_is_profiled_not_listed(tmp_path):
+    f = tmp_path / "lock.json"
+    f.write_text(json.dumps(_lock(), indent=2))
+    for level in (2, 3):
+        out = _convert(f, tmp_path, level)
+        assert "300 entries" in out
+        assert "node_modules/p0" in out and "node_modules/p150" not in out   # examples, not every key
+        assert "`version`" in out and "`resolved`" in out and "`dev`" in out
+        assert len(out) < 2500
+    l3 = _convert(f, tmp_path, 3)
+    assert "`dev`: boolean = true, 38/300" in l3
+
+
+def test_small_dict_of_records_is_not_a_map(tmp_path):
+    f = tmp_path / "small.json"
+    f.write_text(json.dumps({"a": {"x": 1}, "b": {"x": 2}, "c": {"x": 3}}))
+    assert "map of" not in _convert(f, tmp_path, 3)
+
+
+def test_varying_nested_keys_are_not_flattened():
+    rows = [{"deps": {f"lib{i}-{j}": "1.0" for j in range(20)}, "id": i} for i in range(5)]
+    out = render_profile(profile_records(rows), 3)
+    assert "`deps`: object" in out and "deps.lib" not in out
+
+
+def test_constant_field_renders_as_equals():
+    rows = [{"type": "Feature", "ok": True, "n": 7, "id": i} for i in range(10)]
+    out = render_profile(profile_records(rows), 3)
+    assert "- `type`: string = Feature" in out
+    assert "- `ok`: boolean = true" in out
+    assert "- `n`: number = 7" in out
+    assert "enum" not in out.split("`id`")[0]
+
+
+def test_examples_one_for_urls_and_ids_three_for_short_text():
+    rows = [{"url": f"https://example.com/items/{i}", "uid": f"3f2b8c1e-0000-4000-8000-{i:012d}",
+             "word": w} for i, w in enumerate(["red", "green", "blue", "cyan"] * 3)]
+    rows += [{"url": f"https://example.com/items/x{i}", "uid": f"3f2b8c1e-0000-4000-8000-9{i:011d}",
+              "word": f"w{i}"} for i in range(30)]
+    out = render_profile(profile_records(rows), 3)
+    url_line = next(l for l in out.splitlines() if l.startswith("- `url`"))
+    uid_line = next(l for l in out.splitlines() if l.startswith("- `uid`"))
+    word_line = next(l for l in out.splitlines() if l.startswith("- `word`"))
+    assert url_line.count('"') == 2 and uid_line.count('"') == 2
+    assert word_line.count('"') == 6

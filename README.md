@@ -61,21 +61,25 @@ Real public files at the default detail level, tokens counted with tiktoken `cl1
 
 | File | Baseline | MarkItDown | Token Shredder | vs baseline | Words kept |
 |---|---:|---:|---:|---:|---:|
-| *Attention Is All You Need* (arXiv PDF, 15 p.) | 10,168 | 12,175 | 10,243 | −1% | 100% |
-| IRS form W-9 (PDF) | 9,009 | 9,058 | 9,039 | 0% | 100% |
-| Calibre demo document (DOCX) | 2,386 | 2,943 | 2,536 | −6% | 100% |
-| Wikipedia "Python" article (HTML; raw page 325,067) | 27,535 | 71,099 | 20,383 | **26%** | 82% |
-| `requests/sessions.py` (Python) | 7,336 | — | 1,398 | **81%** | 32% |
+| *Attention Is All You Need* (arXiv PDF, 15 p.) | 10,168 | 12,175 | 9,640 | **5%** | 99% |
+| IRS form W-9 (PDF) | 9,009 | 9,058 | 8,417 | **7%** | 100% |
+| Calibre demo document (DOCX) | 2,386 | 2,943 | 2,525 | −6% | 100% |
+| Wikipedia "Python" article (HTML; raw page 325,067) | 27,535 | 71,099 | 9,684 | **65%** | 58% ¹ |
+| `requests/sessions.py` (Python) | 7,336 | — | 1,179 | **84%** | 27% |
 | Express `router/index.js` (JS) | 3,859 | — | 223 | **94%** | 17% |
-| GitHub issues API, 10 issues (JSON) | 15,234 | — | 2,584 | **83%** | 17% |
-| GitHub repo API response (JSON) | 1,863 | — | 1,523 | **18%** | 100% |
+| GitHub issues API, 10 issues (JSON) | 15,234 | — | 828 | **95%** | 11% |
+| GitHub repo API response (JSON) | 1,863 | — | 915 | **51%** | 52% |
 | Airport codes, 86,343 rows, 8.8 MB (CSV) | 3,841,232 | — | 799 | **99.98%** | profile |
+
+¹ The article text is kept; the reference list, "See also" and external links are dropped at the default level (`-d 4` keeps them).
+
+Across a wider test set of 98 public files (papers, RFCs, READMEs, web pages, code in 6 languages, lock files, feeds, spreadsheets, configs; `benchmarks/robustness.py`), the default level produces 466,634 tokens from 17.3 million, with no crashes, budget overruns or size inversions.
 
 What this means:
 
-- **PDF / DOCX:** about the same size as plain extracted text (DOCX adds list markers and table layout), and 14–16% smaller than MarkItDown's output on the same files. Use it for clean, structured text — not for compression.
-- **HTML:** headings, paragraphs, lists and tables in page order; navigation, scripts and link URLs dropped. A third of MarkItDown's size on the Wikipedia page, 26% below the page's plain text.
-- **Code:** an outline — classes, methods and functions with signatures and the first docstring paragraph. Good for "what is in this file and how do I call it?", not for editing or debugging (use `-d 5`). Python uses the real parser; other languages use pattern matching.
+- **PDF / DOCX / text:** cleaned text — broken lines and split words rejoined, page headers/footers and page numbers removed — 5–7% below plain extraction and 14–21% below MarkItDown. For real compression use a lower level: `-d 2` gives headings plus the first sentence of each paragraph (about 40% of the text), `-d 1` the outline.
+- **HTML:** the main content in page order — headings, paragraphs, lists, tables; navigation, cookie banners, scripts, link URLs and reference sections dropped. 14% of MarkItDown's size on the Wikipedia page.
+- **Code:** an outline — classes, methods and functions with signatures and the first sentence of each doc comment; private helpers listed without docs. Good for "what is in this file and how do I call it?", not for editing or debugging (use `-d 5`). Python uses the real parser; other languages use pattern matching.
 - **Data files (JSON, JSONL, CSV, Excel):** a profile — row count, and per field its type, range, length, example values and the values of category-like fields. An 8.8 MB CSV becomes one page. If the profile would not be smaller than the data, you get the data itself (minified JSON / CSV), as with the repo response above. `-d 4` always gives all the data.
 
 The token report the CLI prints uses the same baseline, except for HTML, where it compares with the raw page. Reproduce the table with [`benchmarks/`](benchmarks/).
@@ -99,7 +103,7 @@ PDF, DOCX, PPTX, XLSX, HTML, Markdown, TXT, CSV, JSON, JSON5, YAML, TOML, INI, X
 - No OCR: scanned PDFs give little or no text.
 - PDF tables come out as plain text lines.
 - Outlines for languages other than Python come from pattern matching and can miss unusual declarations.
-- Detail levels don't change PDF/DOCX output (except PPTX speaker notes at 4).
+- PDF headings come from bookmarks or numbering patterns; documents without either get a weaker outline at `-d 1`.
 - YAML, TOML, INI, SQL, XML and similar files are summarised at levels 1–4 (structure, short values); use `-d 5` for the full file.
 - Converting a `.md` file writes `name.shredded.md`; the input is never overwritten.
 - `convert` caches results for an hour in `~/.token-shredder/cache`; use `--no-cache` to skip it.

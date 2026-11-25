@@ -91,22 +91,38 @@ class CodeConverter(BaseConverter):
 
         for node in tree.body:
             if isinstance(node, ast.ClassDef):
+                if self._py_private(node.name) and level <= 2:
+                    continue
                 bases = ", ".join(ast.unparse(b) for b in node.bases)
                 head = f"class {node.name}({bases})" if bases and level >= 2 else f"class {node.name}"
                 parts.append(f"## {head}")
                 self._add_doc(parts, node, level)
                 for item in node.body:
                     if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        private = self._py_private(item.name)
+                        if private and level <= 2:
+                            continue
                         parts.append(f"- `{self._sig(item, level)}`")
                         doc = ast.get_docstring(item)
-                        if doc and level >= 3:
+                        if doc and (level >= 4 or (level == 3 and not private)):
                             parts.append("  " + self._doc(doc, level).replace("\n", "\n  "))
                 parts.append("")
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                private = self._py_private(node.name)
+                if private and level <= 2:
+                    continue
                 parts.append(f"## {self._sig(node, level)}")
-                self._add_doc(parts, node, level)
+                if not private or level >= 4:
+                    self._add_doc(parts, node, level)
                 parts.append("")
         return parts
+
+    @staticmethod
+    def _py_private(name: str) -> bool:
+        """_helper and most dunders; __init__ and __call__ describe the public API."""
+        if name in ("__init__", "__call__"):
+            return False
+        return name.startswith("_")
 
     @staticmethod
     def _sig(node, level: int) -> str:
@@ -124,8 +140,26 @@ class CodeConverter(BaseConverter):
 
     @staticmethod
     def _doc(doc: str, level: int) -> str:
-        doc = doc.strip()
-        return doc if level >= 4 else doc.split("\n\n")[0]
+        doc = CodeConverter._clean_doc(doc)
+        return doc if level >= 4 else CodeConverter._summary(doc)
+
+    @staticmethod
+    def _clean_doc(text: str) -> str:
+        """Strip Javadoc/HTML/Sphinx markup that costs tokens but adds no meaning."""
+        text = re.sub(r"\{@(?:code|link|linkplain|literal|value)\s+([^}]*)\}", r"\1", text)
+        text = re.sub(r":(?:class|func|meth|attr|mod|obj|exc|data|ref):`~?([^`]+)`", r"\1", text)
+        text = re.sub(r"</?(?:em|i|b|strong|code|tt)>", "", text)
+        text = re.sub(r"</?(?:p|br|ul|ol|li|pre)\s*/?>", " ", text)
+        text = text.replace("``", "`")
+        return "\n".join(re.sub(r"[ \t]+", " ", ln).strip() for ln in text.strip().splitlines())
+
+    @staticmethod
+    def _summary(text: str, max_chars: int = 200) -> str:
+        """First sentence of the first paragraph, on one line."""
+        para = re.sub(r"\s+", " ", text.strip().split("\n\n")[0]).strip()
+        m = re.search(r"(?<=[.!?])\s+(?=[A-Z`(\[])", para)
+        first = para[: m.start()] if m else para
+        return first if len(first) <= max_chars else first[: max_chars - 1].rstrip() + "…"
 
     _DECL_RE = re.compile(
         r"^\s*(?:export\s+)?(?:default\s+)?(?:(?:public|private|protected|static|final|abstract|"
@@ -150,19 +184,56 @@ class CodeConverter(BaseConverter):
     def _convert_generic(self, source: str, file_path: str, options: ConversionOptions) -> list:
         level = options.detail_level
         lines = source.splitlines()
+        ext = self._get_ext(file_path)
+        if lines and (len(source) / len(lines) > 300 or max(map(len, lines)) > 5000):
+            return [f"Minified or bundled code ({len(source) // 1024:,} KB on {len(lines):,} lines): "
+                    "no outline possible. Use --detail-level 5 for the full source."]
         parts = [f"## Declarations ({len(lines)} lines)"]
+        seen_docs, names = set(), {}
         for i, line in enumerate(lines):
             if not (self._DECL_RE.match(line) or self._MEMBER_RE.match(line)):
                 continue
             decl = line.strip().rstrip("{").rstrip()
+            private = self._is_private(decl, ext)
+            if private and level <= 2:
+                continue
+            if level <= 3 and ext in (".java", ".ts", ".tsx", ".cs", ".kt"):
+                # "public" is the assumed default and annotations rarely matter for an outline.
+                decl = re.sub(r"^public\s+", "", decl)
+                decl = re.sub(r"@\w+(?:\([^)]*\))?\s+", "", decl)
             if level < 2:
                 decl = self._PARAMS_RE.sub("", decl)
-            if level >= 3:
+                if decl in names:  # overloads: "assertTrue (x5)"
+                    names[decl] += 1
+                    continue
+                names[decl] = 1
+            if level >= 4 or (level == 3 and not private):
                 doc = self._leading_comment(lines, i, full=level >= 4)
-                if doc:
+                doc = self._clean_doc(doc).replace("\n", " ") if doc else ""
+                if level == 3:
+                    doc = self._summary(doc)
+                if doc and doc not in seen_docs:
+                    seen_docs.add(doc)
                     parts.append(f"// {doc}")
             parts.append(decl)
+        if level < 2:
+            parts = [parts[0]] + [f"{d} (x{n})" if n > 1 else d for d, n in names.items()]
         return parts
+
+    @staticmethod
+    def _is_private(decl: str, ext: str) -> bool:
+        """Best-effort 'not part of the public API' per language."""
+        if ext == ".go":
+            m = re.match(r"(?:func\s+(?:\([^)]*\)\s*)?|type\s+)(\w)", decl)
+            return bool(m and m.group(1).islower())
+        if ext == ".rs":
+            return bool(re.match(r"(?:(?:async|unsafe|const)\s+)*fn\s", decl))
+        if ext in (".java", ".ts", ".tsx", ".cs", ".kt"):
+            return bool(re.match(r"(?:\w+\s+)*private\b", decl)) or decl.startswith("#")
+        if ext in (".js", ".mjs", ".cjs", ".jsx"):
+            m = re.search(r"(?:function\s+|class\s+|(?:const|let|var)\s+|^)([\w$]+)", decl)
+            return bool(m and m.group(1).startswith("_"))
+        return False
 
     @staticmethod
     def _leading_comment(lines: list, i: int, full: bool) -> str:

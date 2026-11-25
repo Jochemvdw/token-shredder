@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from token_shredder.converters.base_converter import BaseConverter
 from token_shredder.models import ConversionResult, ConversionOptions
-from token_shredder.profiling import Profile, render_profile
+from token_shredder.profiling import Profile, render_profile, clamp_levels
 from token_shredder.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -69,12 +69,14 @@ class JSONLConverter(BaseConverter):
             if level >= 4:
                 return f"```jsonl\n" + "\n".join(data_lines) + "\n```" + note_text
 
-            lossy = f"# JSONL File: {name}\n\n" + render_profile(profile, level) + note_text
-            lossy += "\n\n_Profile only; use `--detail-level 4` for the data._"
-            # Never return a lossy profile that is longer than the full data.
-            if len(lossy) >= full_len + 12:
-                return self._full(file_path, note_text)
-            return lossy
+            def render(lv: int) -> str:
+                return (f"# JSONL File: {name}\n\n" + render_profile(profile, lv) + note_text
+                        + "\n\n_Profile only; use `--detail-level 4` for the data._")
+
+            # Never longer than the full data, never smaller than the level below.
+            if full_len == 0:
+                return render(level)
+            return clamp_levels(render, level, self._full(file_path, note_text))
         except Exception as e:
             logger.error(f"Error reading JSONL: {e}")
             return f"[Error: {e}]"

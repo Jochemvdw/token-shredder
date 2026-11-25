@@ -36,6 +36,7 @@ _quality_scorer = QualityScorer()
 
 
 BINARY_FORMATS = {'pdf', 'docx', 'pptx', 'xlsx', 'xls'}
+PROSE_FORMATS = {'pdf', 'docx', 'pptx', 'txt', 'md', 'html', 'htm', 'log'}
 CODE_FORMATS = {'python', 'py', 'js', 'ts', 'tsx', 'jsx', 'mjs', 'cjs', 'java', 'go', 'rs',
                 'c', 'cpp', 'cc', 'cxx'}
 
@@ -174,7 +175,9 @@ def _convert_at_level(src: _Source, level: int, opts: dict, cache_enabled: bool)
                 raise ConversionError(f"Could not convert {src.name}: {result.markdown.strip()}")
         raw_markdown = result.markdown
         if level < 5:
-            if opts["deduplicate"]:
+            # Repeated lines are redundancy in prose (page furniture, boilerplate) but
+            # data in code outlines and data profiles, so only prose is deduplicated.
+            if opts["deduplicate"] and src.format in PROSE_FORMATS:
                 result.markdown = _dedup.process(result.markdown)
             if opts["minify_code"] and src.format in CODE_FORMATS:
                 result.markdown = _minify_code_blocks(result.markdown, src.format)
@@ -188,6 +191,14 @@ def _convert_at_level(src: _Source, level: int, opts: dict, cache_enabled: bool)
     result.detail_level = level
     result.source_tokens = src.baseline_tokens(raw_markdown)
     result.output_tokens = _token_counter.estimate(result.markdown)
+    if (level < 5 and src.format not in BINARY_FORMATS
+            and len(result.markdown) >= 0.7 * Path(src.path).stat().st_size):  # cheap pre-check
+        # Never worse than pasting the file itself: if a summary is not smaller
+        # than the full content (level 5), give the full content.
+        full = _convert_at_level(src, 5, opts, cache_enabled)
+        if result.output_tokens >= full.output_tokens:
+            result.markdown = full.markdown
+            result.output_tokens = full.output_tokens
     _set_savings(result)
     src._results[level] = result
     return result

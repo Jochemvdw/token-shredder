@@ -43,6 +43,11 @@ class CSVConverter(BaseConverter):
                 delimiter = self._sniff_delimiter(head, file_path)
                 if options.detail_level >= 4:
                     return f"```csv\n{f.read().rstrip()}\n```\n"
+                full = None
+                if size < 1_000_000:
+                    # Never return a lossy summary that is longer than the data itself.
+                    full = f"```csv\n{f.read().rstrip()}\n```\n"
+                    f.seek(0)
                 reader = csv.reader(f, delimiter=delimiter)
                 headers = next(reader, None)
                 while headers is not None and not headers:
@@ -50,13 +55,9 @@ class CSVConverter(BaseConverter):
                 if headers is None:
                     return ""
                 rows = (r for r in reader if r)
-                body = "\n" + summarize_table(headers, rows, options.detail_level)
-            if size < 1_000_000:
-                # Never return a lossy summary that is longer than the data itself.
-                with open(file_path, 'r', encoding='utf-8', errors='replace', newline='') as f:
-                    full = f"```csv\n{f.read().rstrip()}\n```\n"
-                if len(body) >= len(full):
-                    return full
+                body = summarize_table(headers, rows, options.detail_level, full_text=full)
+                if not body.startswith("```"):
+                    body = "\n" + body
             return body
         except Exception as e:
             logger.error(f"Error reading CSV: {e}")

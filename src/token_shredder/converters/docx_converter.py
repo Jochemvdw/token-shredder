@@ -4,10 +4,13 @@ Converts Word documents to markdown with streaming support
 """
 import re
 from docx import Document
+from docx.table import Table
+from docx.text.paragraph import Paragraph
 from pathlib import Path
 from typing import Optional
 from token_shredder.converters.base_converter import BaseConverter
 from token_shredder.models import ConversionResult, ConversionOptions
+from token_shredder.prose import Block, levels_output, render_blocks
 from token_shredder.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -32,51 +35,75 @@ class DOCXConverter(BaseConverter):
         )
 
     def convert_to_markdown(self, file_path: str, options: ConversionOptions) -> str:
-        markdown_parts = []
+        level = options.detail_level
         try:
             doc = Document(file_path)
-
-            prev_list = False
-            for para in doc.paragraphs:
-                style = para.style.name.lower() if para.style else ""
-                is_list = style.startswith('list') and bool(para.text.strip())
-                if prev_list and not is_list:
-                    markdown_parts.append("")
-                prev_list = is_list
-
-                if style.startswith('heading') and style.replace('heading', '').strip().isdigit():
-                    level = int(style.replace('heading', '').strip())
-                    text = para.text
-                    if text:
-                        markdown_parts.append(f"{'#' * level} {text}")
-                        markdown_parts.append("")
-                elif para.text.strip() and style.startswith('list'):
-                    indent = ''
-                    m = re.search(r'(\d+)$', style)
-                    if m and int(m.group(1)) > 1:
-                        indent = '  ' * (int(m.group(1)) - 1)
-                    marker = '1.' if 'number' in style else '-'
-                    markdown_parts.append(f"{indent}{marker} {para.text.strip()}")
-                elif para.text.strip():
-                    markdown_parts.append(para.text)
-                    markdown_parts.append("")
-
-            if prev_list:
-                markdown_parts.append("")
-
-            # Tables
-            for table in doc.tables:
-                md_table = self._table_to_markdown(table)
-                if md_table:
-                    markdown_parts.append("")
-                    markdown_parts.append(md_table)
-                    markdown_parts.append("")
-
+            blocks = self._blocks(doc)
+            if not blocks:
+                return "[No text content found in this document]"
+            blocks_all = blocks + self._extras(doc)
+            if level >= 5:
+                return render_blocks(blocks_all, 4, raw=True) + "\n"
+            return levels_output(lambda lv: render_blocks(blocks_all, lv), level) + "\n"
         except Exception as e:
             logger.error(f"Error reading DOCX: {e}")
-            markdown_parts.append(f"[Error reading DOCX: {e}]")
+            return f"[Error reading DOCX: {e}]"
 
-        return "\n".join(markdown_parts)
+    def _blocks(self, doc) -> list:
+        blocks = []
+        has_title = False
+        for child in doc.element.body.iterchildren():
+            tag = child.tag.rsplit('}', 1)[-1]
+            if tag == 'tbl':
+                md_table = self._table_to_markdown(Table(child, doc))
+                if md_table:
+                    blocks.append(Block('table', md_table))
+                continue
+            if tag != 'p':
+                continue
+            para = Paragraph(child, doc)
+            text = para.text
+            if not text.strip():
+                continue
+            style = para.style.name.lower() if para.style is not None and para.style.name else ""
+            head = style.replace('heading', '').strip()
+            if style.startswith('heading') and head.isdigit():
+                blocks.append(Block('heading', text.strip(), max(1, int(head))))
+            elif style == 'title':
+                blocks.append(Block('title', text.strip(), 1))
+                has_title = True
+            elif style.startswith('list'):
+                indent = ''
+                m = re.search(r'(\d+)$', style)
+                if m and int(m.group(1)) > 1:
+                    indent = '  ' * (int(m.group(1)) - 1)
+                marker = '1.' if 'number' in style else '-'
+                blocks.append(Block('list', f"{indent}{marker} {text.strip()}"))
+            else:
+                blocks.append(Block('para', text.strip()))
+        if not has_title:
+            try:
+                title = (doc.core_properties.title or "").strip()
+            except Exception:
+                title = ""
+            if title and not any(b.kind in ('heading', 'para') and b.text == title for b in blocks):
+                blocks.insert(0, Block('title', title, 1))
+        return blocks
+
+    @staticmethod
+    def _extras(doc) -> list:
+        """Page headers and footers: dropped below level 4."""
+        seen, parts = set(), []
+        try:
+            for section in doc.sections:
+                for part in (section.header, section.footer):
+                    text = "\n".join(p.text.strip() for p in part.paragraphs if p.text.strip())
+                    if text and text not in seen:
+                        seen.add(text)
+                        parts.append(text)
+        except Exception as e:
+            logger.info(f"Could not read DOCX headers/footers: {e}")
+        return [Block('extra', "Header/footer: " + " | ".join(parts))] if parts else []
 
     def get_file_info(self, file_path: str) -> dict:
         try:

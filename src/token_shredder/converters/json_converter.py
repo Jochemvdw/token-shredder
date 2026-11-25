@@ -8,7 +8,7 @@ from typing import Optional
 from token_shredder.converters.base_converter import BaseConverter
 from token_shredder.models import ConversionResult, ConversionOptions
 from token_shredder.utils.logger import setup_logger
-from token_shredder.profiling import profile_records, render_fields, example
+from token_shredder.profiling import profile_records, render_fields, example, map_kind, describe_map, clamp_levels, is_id_like
 
 logger = setup_logger(__name__)
 
@@ -42,21 +42,26 @@ class JSONConverter(BaseConverter):
                 # All the data, minified: lossless and usually much smaller
                 # than pretty-printed JSON.
                 return minified
+            name = Path(file_path).name
 
-            lines = [f"# JSON File: {Path(file_path).name}", ""]
-            lines.append(f"Top level: {self._type_name(data)}")
-            # 1 = top-level keys only, 2 = nested keys, 3 = nested keys + example values
-            max_depth = 1 if level == 1 else 3
-            self._schema(data, lines, indent=0, depth=1, max_depth=max_depth, examples=level >= 3, level=level)
-            lines.append("")
-            lines.append("_Schema only; use `--detail-level 4` for the data._")
-            schema = "\n".join(lines)
-            # Never return a lossy schema that is longer than the full data.
-            return minified if len(schema) >= len(minified) else schema
+            def render(lv: int) -> str:
+                lines = [f"# JSON File: {name}", ""]
+                lines.append(f"Top level: {self._type_name(data)}")
+                # 1 = top-level keys only, 2 = nested keys, 3 = nested keys + example values
+                self._schema(data, lines, indent=0, depth=1, max_depth=1 if lv == 1 else 3,
+                             examples=lv >= 3, level=lv)
+                lines.append("")
+                lines.append("_Schema only; use `--detail-level 4` for the data._")
+                return "\n".join(lines)
+
+            # Never longer than the minified data, never smaller than the level below.
+            return clamp_levels(render, level, minified)
 
         except Exception as e:
             logger.error(f"Error reading JSON: {e}")
             return f"[Error: {e}]"
+
+    MAX_KEYS = 40
 
     def _schema(self, data, lines, indent, depth, max_depth, examples, level=3):
         pad = "  " * indent
@@ -65,7 +70,17 @@ class JSONConverter(BaseConverter):
             return
         if not isinstance(data, dict):
             return
-        for key, value in data.items():
+        kind = map_kind(data)
+        if kind:
+            if indent == 0:
+                lines.append(f"- map of {len(data):,} entries")
+                indent = 1
+            self._map(data, kind, lines, indent, level)
+            return
+        for i, (key, value) in enumerate(data.items()):
+            if i >= self.MAX_KEYS:
+                lines.append(f"{pad}- ... {len(data) - i:,} more keys")
+                break
             line = f"{pad}- `{key}`: {self._type_name(value)}"
             if examples and not isinstance(value, (dict, list)):
                 line += f" = {self._example(value)}"
@@ -74,6 +89,15 @@ class JSONConverter(BaseConverter):
                 self._profile_list(value, lines, indent + 1, level)
             elif depth < max_depth and isinstance(value, (dict, list)):
                 self._schema(value, lines, indent + 1, depth + 1, max_depth, examples, level)
+
+    @staticmethod
+    def _map(data, kind, lines, indent, level):
+        """A dict used as id -> record lookup: describe it like a list of records."""
+        if level < 2:
+            return
+        pad = "  " * indent
+        for ml in describe_map(data, kind, level):
+            lines.append(pad + "  " + ml)
 
     @staticmethod
     def _profile_list(data, lines, indent, level):
@@ -89,10 +113,17 @@ class JSONConverter(BaseConverter):
 
     @staticmethod
     def _example(value) -> str:
+        """A real value of this object (not one example of many): keep human text
+        readable (up to 120 chars); cut URLs, ids and hashes short."""
+        if isinstance(value, str) and not is_id_like(value):
+            text = json.dumps(value, ensure_ascii=False)
+            return text if len(text) <= 120 else text[:117] + '..."'
         return example(value)
 
     def _type_name(self, value) -> str:
         if isinstance(value, dict):
+            if map_kind(value):
+                return f"map({len(value):,} entries)"
             return f"object({len(value)} keys)"
         elif isinstance(value, list):
             return f"array({len(value)} items)"

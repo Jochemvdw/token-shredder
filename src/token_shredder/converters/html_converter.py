@@ -107,7 +107,29 @@ class HTMLConverter(BaseConverter):
                     parts += ["", prefix + text]
             emitted.add(id(el))
 
+        if level <= 3:
+            parts = self._drop_back_matter(parts)
         return re.sub(r'\n{3,}', '\n\n', "\n".join(parts)).strip() + "\n"
+
+    _BACK_MATTER = re.compile(
+        r"^(#{1,6}) (references|notes|citations|footnotes|bibliography|sources|external links|"
+        r"further reading|see also|related articles|works cited)\s*$", re.IGNORECASE)
+
+    def _drop_back_matter(self, parts: list) -> list:
+        """Drop reference lists, 'See also' and link sections (kept at level 4)."""
+        out, skip_depth = [], None
+        for line in parts:
+            m = re.match(r"^(#{1,6}) ", line)
+            if m:
+                depth = len(m.group(1))
+                if skip_depth is not None and depth <= skip_depth:
+                    skip_depth = None
+                bm = self._BACK_MATTER.match(line)
+                if skip_depth is None and bm:
+                    skip_depth = depth
+            if skip_depth is None:
+                out.append(line)
+        return out
 
     _BOILERPLATE = {'nav', 'navbar', 'navbox', 'menu', 'sidebar', 'breadcrumb', 'breadcrumbs',
                     'cookie', 'cookies', 'consent', 'banner', 'advert', 'advertisement', 'ads',

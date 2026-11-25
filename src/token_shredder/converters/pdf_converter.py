@@ -1,12 +1,13 @@
 """
 token_shredder - PDF Converter
-Converts PDF files to semantic markdown with streaming support
+Converts PDF files to markdown: clean text at levels 1-4, raw extraction at 5
 """
 import pypdf
 from pathlib import Path
 from typing import Optional
 from token_shredder.converters.base_converter import BaseConverter
 from token_shredder.models import ConversionResult, ConversionOptions
+from token_shredder.prose import Block, build_blocks, levels_output, render_blocks, strip_running, _key
 from token_shredder.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -33,20 +34,26 @@ class PDFConverter(BaseConverter):
 
     def convert_to_markdown(self, file_path: str, options: ConversionOptions) -> str:
         markdown_parts = []
+        level = options.detail_level
         try:
             reader = pypdf.PdfReader(file_path)
             num_pages = len(reader.pages)
+            page_texts = [(page.extract_text() or "") for page in reader.pages]
 
-            for i, page in enumerate(reader.pages):
-                text = page.extract_text() or ""
-                if text.strip():
-                    markdown_parts.append(f"## Page {i+1}")
-                    markdown_parts.append("")
-                    markdown_parts.append(text)
-                    markdown_parts.append("")
+            if level >= 5:
+                # Full extraction, no clean-up.
+                for i, text in enumerate(page_texts):
+                    if text.strip():
+                        markdown_parts.extend([f"## Page {i+1}", "", text, ""])
+            else:
+                body = self._prose(reader, page_texts, level)
+                if body:
+                    markdown_parts.append(body)
+                elif not any(t.strip() for t in page_texts):
+                    markdown_parts.append("[No extractable text in this PDF (scanned or image-only?)]")
 
             # Handle images
-            if options.preserve_images:
+            if options.preserve_images and level >= 3:
                 markdown_parts.append("\n## Images")
                 for i in range(num_pages):
                     if hasattr(reader.pages[i], '_images') and reader.pages[i]._images:
@@ -57,6 +64,53 @@ class PDFConverter(BaseConverter):
             markdown_parts.append(f"[Error reading PDF: {e}]")
 
         return "\n".join(markdown_parts)
+
+    @staticmethod
+    def _outline(reader) -> list:
+        """Bookmarks as (depth, title), empty when the PDF has none."""
+        items = []
+
+        def walk(nodes, depth):
+            for node in nodes:
+                if isinstance(node, list):
+                    walk(node, depth + 1)
+                else:
+                    title = getattr(node, "title", None)
+                    if title and str(title).strip():
+                        items.append((depth, " ".join(str(title).split())))
+        try:
+            walk(reader.outline, 0)
+        except Exception as e:  # damaged outline: fall back to heading detection
+            logger.info(f"Could not read PDF outline: {e}")
+            return []
+        return items
+
+    def _prose(self, reader, page_texts: list, level: int) -> str:
+        pages = [t.split("\n") for t in page_texts]
+        outline = self._outline(reader)
+        known = {}
+        for depth, title in outline:
+            known.setdefault(_key(title), depth + 1)
+        entries = strip_running(pages, mark_pages=True)
+        blocks = build_blocks(entries, known, mark_pages=True)
+        title = None
+        try:
+            title = " ".join(str((reader.metadata or {}).get("/Title") or "").split())
+        except Exception:
+            title = None
+        if title and len(title) > 3 and title.lower() not in ("untitled", "microsoft word") \
+                and not title.lower().endswith((".pdf", ".doc", ".docx", ".tex", ".dvi")) \
+                and not any(b.kind == "title" for b in blocks):
+            blocks.insert(0, Block("title", title, 1))
+        if not blocks:
+            return ""
+
+        def render(lv: int) -> str:
+            if lv == 1 and outline:
+                head = [f"# {title}"] if title and len(title) > 3 else []
+                return "\n".join(head + ["#" * min(d + 2, 6) + " " + t for d, t in outline])
+            return render_blocks(blocks, lv)
+        return levels_output(render, level)
 
     def get_file_info(self, file_path: str) -> dict:
         try:

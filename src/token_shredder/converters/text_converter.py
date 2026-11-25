@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 from token_shredder.converters.base_converter import BaseConverter
 from token_shredder.models import ConversionResult, ConversionOptions
+from token_shredder.prose import prose_from_text
 from token_shredder.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -28,39 +29,15 @@ class TextConverter(BaseConverter):
         )
 
     def convert_to_markdown(self, file_path: str, options: ConversionOptions) -> str:
-        markdown_parts = []
         try:
             with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                 text = f.read()
-
-            lines = text.splitlines()
-            markdown_parts.append(f"# {file_path}")
-            markdown_parts.append("")
-
-            # Try to detect structure
-            for i, line in enumerate(lines):
-                line = line.strip()
-                if not line:
-                    continue
-
-                # Detect potential headings (short lines ending with :)
-                if len(line) < 60 and line.endswith(':'):
-                    markdown_parts.append(f"## {line[:-1]}")
-                # Detect numbered lists
-                elif line.startswith(('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.')):
-                    markdown_parts.append(line)
-                # Detect bullet points
-                elif line.startswith(('- ', '* ', '• ')):
-                    markdown_parts.append(line)
-                else:
-                    markdown_parts.append(line)
-                markdown_parts.append("")
-
+            if options.detail_level >= 5:
+                return text
+            return prose_from_text(text, options.detail_level)
         except Exception as e:
             logger.error(f"Error reading text: {e}")
-            markdown_parts.append(f"[Error: {e}]")
-
-        return "\n".join(markdown_parts)
+            return f"[Error: {e}]"
 
     def get_file_info(self, file_path: str) -> dict:
         try:

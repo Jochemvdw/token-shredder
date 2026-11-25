@@ -1,10 +1,11 @@
 """
 token_shredder - Markdown Converter
-Self-optimizes markdown files
+Cleans markdown files: badges, images, HTML and link URLs go at levels 1-3
 """
 from typing import Optional
 from token_shredder.converters.base_converter import BaseConverter
 from token_shredder.models import ConversionResult, ConversionOptions
+from token_shredder.prose import markdown_level
 from token_shredder.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -30,16 +31,9 @@ class MarkdownConverter(BaseConverter):
         try:
             with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                 content = f.read()
-
-            lines = content.splitlines()
-            optimized = []
-            for line in lines:
-                if line.strip():
-                    optimized.append(line.rstrip())
-                elif optimized and optimized[-1].strip():
-                    optimized.append("")
-
-            return '\n'.join(optimized)
+            if options.detail_level >= 5:
+                return content
+            return markdown_level(content, options.detail_level)
         except Exception as e:
             logger.error(f"Error reading MD: {e}")
             return f"[Error reading MD: {e}]"
