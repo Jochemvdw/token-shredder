@@ -37,7 +37,7 @@ class TOMLConverter(BaseConverter):
         try:
             with open(file_path, 'rb') as f:
                 raw = f.read()
-            text = raw.decode('utf-8', errors='replace')
+            text = raw.decode('utf-8', errors='replace').replace('\r\n', '\n')
             full = f"```toml\n{text.rstrip()}\n```\n"
             if options.detail_level >= 5:
                 return text

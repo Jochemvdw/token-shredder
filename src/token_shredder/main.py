@@ -232,6 +232,7 @@ def _convert_at_level(src: _Source, level: int, opts: dict, cache_enabled: bool)
             # Converters report read/parse failures as "[Error ...]" text.
             if result.markdown.lstrip().startswith("[Error"):
                 raise ConversionError(f"Could not convert {src.name}: {result.markdown.strip()}")
+        result.markdown = result.markdown.replace("\r\n", "\n")  # Windows line endings
         raw_markdown = result.markdown
         if level < 5:
             # Repeated lines are redundancy in prose (page furniture, boilerplate) but

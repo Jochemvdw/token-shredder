@@ -14,6 +14,11 @@ from token_shredder.utils.logger import setup_logger
 logger = setup_logger(__name__)
 
 
+def _lf(text: str) -> str:
+    """Files are opened with newline='' for the csv module; normalise CRLF for output."""
+    return text.replace("\r\n", "\n")
+
+
 class CSVConverter(BaseConverter):
     @staticmethod
     def get_supported_extensions() -> list:
@@ -42,11 +47,11 @@ class CSVConverter(BaseConverter):
                 f.seek(0)
                 delimiter = self._sniff_delimiter(head, file_path)
                 if options.detail_level >= 4:
-                    return f"```csv\n{f.read().rstrip()}\n```\n"
+                    return f"```csv\n{_lf(f.read()).rstrip()}\n```\n"
                 full = None
                 if size < 1_000_000:
                     # Never return a lossy summary that is longer than the data itself.
-                    full = f"```csv\n{f.read().rstrip()}\n```\n"
+                    full = f"```csv\n{_lf(f.read()).rstrip()}\n```\n"
                     f.seek(0)
                 reader = csv.reader(f, delimiter=delimiter)
                 headers = next(reader, None)

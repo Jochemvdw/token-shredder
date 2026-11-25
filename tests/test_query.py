@@ -74,7 +74,8 @@ def test_batch_query_ranks_across_files(tmp_path):
     (tmp_path / "b.py").write_text("\n".join(f"def unrelated{i}(x):\n    return x + {i}\n" for i in range(50)))
     results = batch_convert(str(tmp_path), query="truncate", max_tokens=3000, quiet=True,
                             write_output=False, cache_enabled=False)
-    by_name = {r.source_file.split("/")[-1]: r for r in results}
+    from pathlib import Path
+    by_name = {Path(r.source_file).name: r for r in results}
     assert "substring" in by_name["a.ts"].markdown
     assert "Relevant to" not in by_name["b.py"].markdown
     assert sum(r.output_tokens for r in results) <= 3000 + 200
